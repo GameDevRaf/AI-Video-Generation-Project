@@ -1,11 +1,22 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { getProviderKey } from '../lib/getProviderKey'
+import { providerRegistry } from '../providers/registry'
+import { getCatalogEntry } from '../providers/catalog'
 import { updateJobStatus, storeTextOutput } from '../lib/jobs'
 import type { DbJob } from '../../../app/types/database.types'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
 export async function handleScriptJob(job: DbJob) {
-  const input = job.input as { idea: string; tone: string; existing_script?: string; refinement_instructions?: string }
+  const input = job.input as {
+    idea: string
+    tone: string
+    existing_script?: string
+    refinement_instructions?: string
+    provider?: string
+    model?: string
+  }
+
+  const providerId = input.provider ?? job.provider ?? 'anthropic'
+  const meta = getCatalogEntry(providerId)
+  const model = input.model ?? job.model ?? meta?.defaultModel ?? 'claude-sonnet-4-6'
 
   const isRefinement = !!input.existing_script
 
@@ -17,22 +28,22 @@ export async function handleScriptJob(job: DbJob) {
     ? `Existing script:\n${input.existing_script}\n\nRefinement instructions:\n${input.refinement_instructions}`
     : `Video idea: ${input.idea}\nTone: ${input.tone}\n\nGenerate 3 script variations.`
 
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 4096,
+  const apiKey = await getProviderKey(providerId, job.user_id)
+  const provider = providerRegistry.script(providerId)
+
+  const { text } = await provider.generate({
+    job,
+    apiKey,
+    model,
+    systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
-    system: systemPrompt,
+    maxTokens: 4096,
   })
 
-  const fullText = message.content
-    .filter(b => b.type === 'text')
-    .map(b => (b as { type: 'text'; text: string }).text)
-    .join('')
-
   if (isRefinement) {
-    await storeTextOutput(job, fullText.trim(), 'script_refined')
+    await storeTextOutput(job, text.trim(), 'script_refined')
   } else {
-    const scripts = fullText.split('---SCRIPT_BREAK---').map(s => s.trim()).filter(Boolean)
+    const scripts = text.split('---SCRIPT_BREAK---').map(s => s.trim()).filter(Boolean)
     for (let i = 0; i < Math.min(scripts.length, 3); i++) {
       await storeTextOutput(job, scripts[i], `script_candidate_${i + 1}`)
     }
@@ -40,6 +51,6 @@ export async function handleScriptJob(job: DbJob) {
 
   await updateJobStatus(job.id, 'completed', {
     completed_at: new Date().toISOString(),
-    output_summary: { count: isRefinement ? 1 : 3 },
+    output_summary: { count: isRefinement ? 1 : 3, provider: providerId, model },
   })
 }

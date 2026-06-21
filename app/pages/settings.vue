@@ -27,51 +27,41 @@
         </div>
       </div>
 
+      <!-- Default script provider -->
+      <SettingsProviderRow
+        label="Script AI provider"
+        description="Default LLM for generating video scripts."
+        :providers="getCatalogByCategory('script')"
+        :selected-provider-id="userSettings.default_script_provider"
+        @provider-change="v => save('default_script_provider', v)"
+      />
+
+      <!-- Default image provider -->
+      <SettingsProviderRow
+        label="Image provider"
+        description="Default AI used to generate scene images."
+        :providers="getCatalogByCategory('image')"
+        :selected-provider-id="userSettings.default_image_provider"
+        @provider-change="v => save('default_image_provider', v)"
+      />
+
       <!-- Default audio provider -->
-      <div class="flex items-start justify-between gap-8 py-4 border-b border-white/8">
-        <div class="flex flex-col gap-1">
-          <span class="text-sm text-gray-200">Default audio provider</span>
-          <span class="text-xs text-gray-500">Applied when starting a new audio generation.</span>
-        </div>
-        <select
-          v-model="userSettings.default_audio_provider"
-          class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/20 shrink-0"
-          @change="save('default_audio_provider', userSettings.default_audio_provider)"
-        >
-          <option value="elevenlabs">ElevenLabs</option>
-          <option value="openai">OpenAI TTS</option>
-        </select>
-      </div>
+      <SettingsProviderRow
+        label="Audio / TTS provider"
+        description="Default text-to-speech service for voiceovers."
+        :providers="getCatalogByCategory('audio')"
+        :selected-provider-id="userSettings.default_audio_provider"
+        @provider-change="v => save('default_audio_provider', v)"
+      />
 
-      <!-- Default image model -->
-      <div class="flex items-start justify-between gap-8 py-4 border-b border-white/8">
-        <div class="flex flex-col gap-1">
-          <span class="text-sm text-gray-200">Default image model</span>
-          <span class="text-xs text-gray-500">e.g. <code class="bg-white/5 px-1 rounded">dall-e-3</code>, <code class="bg-white/5 px-1 rounded">stable-diffusion-xl</code></span>
-        </div>
-        <input
-          v-model="userSettings.default_image_model"
-          type="text"
-          placeholder="dall-e-3"
-          class="w-44 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-white/20 shrink-0"
-          @blur="save('default_image_model', userSettings.default_image_model)"
-        />
-      </div>
-
-      <!-- Default video model -->
-      <div class="flex items-start justify-between gap-8 py-4 border-b border-white/8">
-        <div class="flex flex-col gap-1">
-          <span class="text-sm text-gray-200">Default video model</span>
-          <span class="text-xs text-gray-500">e.g. <code class="bg-white/5 px-1 rounded">gen-3-alpha</code>, <code class="bg-white/5 px-1 rounded">kling-v1</code></span>
-        </div>
-        <input
-          v-model="userSettings.default_video_model"
-          type="text"
-          placeholder="gen-3-alpha"
-          class="w-44 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-white/20 shrink-0"
-          @blur="save('default_video_model', userSettings.default_video_model)"
-        />
-      </div>
+      <!-- Default video provider -->
+      <SettingsProviderRow
+        label="Video provider"
+        description="Default service for image-to-video generation."
+        :providers="getCatalogByCategory('video')"
+        :selected-provider-id="userSettings.default_video_provider"
+        @provider-change="v => save('default_video_provider', v)"
+      />
     </section>
 
     <!-- ── API Keys & Providers ── -->
@@ -86,7 +76,7 @@
           class="flex items-center justify-between px-4 py-3 bg-white/3"
         >
           <div class="flex flex-col gap-0.5">
-            <span class="text-sm text-gray-200 capitalize">{{ key.provider }}</span>
+            <span class="text-sm text-gray-200">{{ displayName(key.provider) }}</span>
             <span class="text-xs text-gray-500">{{ key.key_name ?? 'Unnamed key' }} · Added {{ relativeTime(key.created_at) }}</span>
           </div>
           <div class="flex items-center gap-3">
@@ -115,9 +105,13 @@
             <label class="text-xs text-gray-500">Provider</label>
             <select
               v-model="newKey.provider"
-              class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/20"
+              class="w-full px-3 py-2 bg-gray-800 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/20"
             >
-              <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.label }}</option>
+              <optgroup v-for="cat in CATEGORIES" :key="cat.id" :label="cat.label">
+                <option v-for="p in getCatalogByCategory(cat.id)" :key="p.id" :value="p.id">
+                  {{ p.displayName }}
+                </option>
+              </optgroup>
             </select>
           </div>
           <div class="flex flex-col gap-1.5">
@@ -130,12 +124,21 @@
             />
           </div>
         </div>
+
+        <!-- Dual-credential hint -->
+        <p v-if="selectedNewProviderMeta?.dualCredentials && selectedNewProviderMeta.dualCredentialFields" class="text-xs text-amber-400/80 leading-snug">
+          {{ selectedNewProviderMeta.displayName }} requires two credentials. Store as JSON:<br>
+          <code class="bg-white/5 px-1 rounded text-amber-300">{{ dualCredentialExample }}</code>
+        </p>
+
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs text-gray-500">API key</label>
+          <label class="text-xs text-gray-500">
+            {{ selectedNewProviderMeta?.dualCredentials ? 'Credentials (JSON)' : 'API key' }}
+          </label>
           <input
             v-model="newKey.secret"
             type="password"
-            placeholder="sk-… or your key"
+            :placeholder="selectedNewProviderMeta?.dualCredentials ? 'Paste JSON credentials…' : 'sk-… or your key'"
             class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-white/20 font-mono"
           />
         </div>
@@ -164,40 +167,45 @@
 </template>
 
 <script setup lang="ts">
+import { PROVIDER_CATALOG, getCatalogByCategory } from '~/utils/providerCatalog'
+import type { ProviderMeta } from '~/utils/providerCatalog'
+
 definePageMeta({ layout: 'dashboard', middleware: 'auth' })
+
+const CATEGORIES = [
+  { id: 'script' as const, label: 'Script (LLM)' },
+  { id: 'image' as const, label: 'Image' },
+  { id: 'audio' as const, label: 'Audio / TTS' },
+  { id: 'video' as const, label: 'Video' },
+]
 
 const promptModes = [
   { value: 'after_generation', label: 'Generate first' },
   { value: 'before_generation', label: 'Edit prompt first' },
 ]
 
-const providers = [
-  { id: 'anthropic', label: 'Anthropic (Claude)' },
-  { id: 'elevenlabs', label: 'ElevenLabs' },
-  { id: 'openai', label: 'OpenAI' },
-  { id: 'stability', label: 'Stability AI' },
-  { id: 'fal', label: 'fal.ai' },
-  { id: 'runway', label: 'Runway' },
-  { id: 'kling', label: 'Kling' },
-  { id: 'suno', label: 'Suno' },
-]
+function displayName(providerId: string): string {
+  return PROVIDER_CATALOG.find(p => p.id === providerId)?.displayName ?? providerId
+}
 
 // ── User settings ──
 interface UserSettings {
   prompt_edit_mode: string
+  default_script_provider: string
+  default_image_provider: string
   default_audio_provider: string
-  default_audio_voice_id: string | null
-  default_image_model: string | null
-  default_video_model: string | null
+  default_video_provider: string
+  default_audio_model: string | null
   default_music_model: string | null
 }
 
 const userSettings = reactive<UserSettings>({
   prompt_edit_mode: 'after_generation',
+  default_script_provider: 'anthropic',
+  default_image_provider: 'fal',
   default_audio_provider: 'elevenlabs',
-  default_audio_voice_id: null,
-  default_image_model: null,
-  default_video_model: null,
+  default_video_provider: 'runway',
+  default_audio_model: null,
   default_music_model: null,
 })
 
@@ -211,6 +219,7 @@ onMounted(async () => {
 
 async function save(field: keyof UserSettings, value: string | null) {
   await $fetch('/api/settings', { method: 'PATCH', body: { [field]: value } })
+  if (field in userSettings) (userSettings as Record<string, string | null>)[field] = value
   clearTimeout(saveTimer)
   savedMsg.value = 'Saved'
   saveTimer = setTimeout(() => { savedMsg.value = '' }, 2000)
@@ -229,6 +238,18 @@ const keys = ref<ApiKeyMeta[]>([])
 const newKey = reactive({ provider: 'elevenlabs', keyName: '', secret: '' })
 const savingKey = ref(false)
 const keyError = ref('')
+
+const selectedNewProviderMeta = computed<ProviderMeta | undefined>(() =>
+  PROVIDER_CATALOG.find(p => p.id === newKey.provider)
+)
+
+const dualCredentialExample = computed(() => {
+  const fields = selectedNewProviderMeta.value?.dualCredentialFields
+  if (!fields) return ''
+  const k1 = fields[0].split(' ')[0].toLowerCase()
+  const k2 = fields[1].split(' ')[0].toLowerCase()
+  return `{"${k1}":"...","${k2}":"..."}`
+})
 
 onMounted(async () => {
   keys.value = await $fetch<ApiKeyMeta[]>('/api/provider/keys').catch(() => [])

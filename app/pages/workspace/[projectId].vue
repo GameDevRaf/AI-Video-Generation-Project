@@ -3,9 +3,13 @@
     <!-- Top-right controls -->
     <template #model-selector>
       <div class="flex items-center gap-2">
-        <span class="text-xs text-gray-500 px-3 py-1 rounded-full border border-white/10">
-          {{ currentStageLabel }}
-        </span>
+        <WorkspaceModelSelector
+          :stage="(projectStore.currentStage as 'script' | 'image' | 'audio' | 'video') || 'script'"
+          :saved-provider-ids="savedProviderIds"
+          :initial-provider-id="currentProviderId"
+          @provider-changed="onProviderChanged"
+          @open-key-panel="providerPanelOpen = true"
+        />
         <button
           class="text-xs text-gray-400 hover:text-white px-3 py-1 rounded-full border border-white/10 hover:border-white/20 transition-colors"
           @click="providerPanelOpen = true"
@@ -108,17 +112,30 @@ const projectSettings = computed(() => projectStore.settings)
 const loading = computed(() => projectStore.loading)
 const error = computed(() => projectStore.error)
 
-const stageLabels: Record<string, string> = {
-  script: 'Script',
-  scene_split: 'Scenes',
-  image: 'Image',
-  audio: 'Audio',
-  video: 'Video',
-  export: 'Export',
+// Provider selector state
+const savedProviderIds = ref<string[]>([])
+
+const STAGE_PROVIDER_FIELD: Record<string, string> = {
+  script: 'default_script_provider',
+  image: 'default_image_provider',
+  audio: 'default_audio_provider',
+  video: 'default_video_provider',
 }
-const currentStageLabel = computed(() =>
-  stageLabels[projectStore.currentStage] ?? 'Script'
-)
+const currentProviderId = computed(() => {
+  const stage = projectStore.currentStage
+  const field = STAGE_PROVIDER_FIELD[stage]
+  return field ? (projectSettings.value as Record<string, string | null> | null)?.[field] ?? undefined : undefined
+})
+
+async function onProviderChanged(providerId: string, modelId: string) {
+  const stage = projectStore.currentStage
+  const field = STAGE_PROVIDER_FIELD[stage]
+  if (!field) return
+  await $fetch('/api/projects/' + projectId.value + '/settings', {
+    method: 'PATCH',
+    body: { [field]: providerId, [`default_${stage}_model`]: modelId },
+  }).catch(() => {})
+}
 
 onMounted(async () => {
   workspace.setProject(projectId.value)
@@ -129,6 +146,10 @@ onMounted(async () => {
   if (['audio', 'video', 'export'].includes(stage)) showAudioStage.value = true
   if (['video', 'export'].includes(stage)) showVideoStage.value = true
   if (stage === 'export') showExportStage.value = true
+
+  // Load which providers have saved API keys (for ModelSelector badges)
+  const keys = await $fetch<{ provider: string }[]>('/api/provider/keys').catch(() => [])
+  savedProviderIds.value = [...new Set(keys.map(k => k.provider))]
 })
 
 onUnmounted(() => {

@@ -7,6 +7,12 @@ export default defineEventHandler(async (event) => {
   const projectId = getRouterParam(event, 'id')
   const body = await readBody<{
     prompt_edit_mode?: string
+    // migration 004 — per-project provider overrides
+    default_script_provider?: string
+    default_image_provider?: string
+    default_audio_provider?: string
+    default_video_provider?: string
+    // model fields
     default_image_model?: string
     default_audio_model?: string
     default_video_model?: string

@@ -78,7 +78,7 @@
       <!-- Speed -->
       <select
         v-model="playbackRate"
-        class="text-xs bg-white/5 border border-white/10 rounded px-2 py-1 text-gray-400 focus:outline-none"
+        class="text-xs bg-gray-800 border border-white/10 rounded px-2 py-1 text-gray-300 focus:outline-none"
         @change="applyRate"
       >
         <option value="0.75">0.75×</option>

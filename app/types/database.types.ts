@@ -110,6 +110,22 @@ export interface DbProjectSettings {
   default_video_model: string | null
   default_music_model: string | null
   timeline_density: string | null
+  // migration 004 — per-project provider overrides (null = inherit from user_settings)
+  default_script_provider: string | null
+  default_image_provider: string | null
+  default_audio_provider: string | null
+  default_video_provider: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DbUserSettings {
+  id: string
+  user_id: string
+  default_script_provider: string   // DEFAULT 'anthropic'
+  default_image_provider: string    // DEFAULT 'fal'
+  default_video_provider: string    // DEFAULT 'runway'
+  default_audio_model: string | null
   created_at: string
   updated_at: string
 }

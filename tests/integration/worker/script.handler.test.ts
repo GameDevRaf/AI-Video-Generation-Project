@@ -1,69 +1,65 @@
 // @vitest-environment node
-/**
- * Integration tests for the script worker handler.
- * Mocks Anthropic SDK and the Supabase admin client so no real network calls happen.
- * Tests: message construction, response parsing, output storage, status transitions.
- */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
-const mockCreate = vi.fn()
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: class {
-    messages = { create: mockCreate }
-  },
+const mockScriptGenerate = vi.fn()
+vi.mock('../../../server/worker/providers/registry', () => ({
+  providerRegistry: { script: () => ({ generate: mockScriptGenerate }) },
+}))
+
+const mockGetProviderKey = vi.fn().mockResolvedValue('test-api-key')
+vi.mock('../../../server/worker/lib/getProviderKey', () => ({
+  getProviderKey: mockGetProviderKey,
 }))
 
 const mockUpdateJobStatus = vi.fn()
-const mockStoreTextOutput = vi.fn().mockResolvedValue({ id: 'out-1' })
+const mockStoreTextOutput = vi.fn().mockResolvedValue('out-1')
 vi.mock('../../../server/worker/lib/jobs', () => ({
   updateJobStatus: mockUpdateJobStatus,
   storeTextOutput: mockStoreTextOutput,
   storeFileOutput: vi.fn(),
 }))
 
-vi.mock('../../../server/worker/lib/supabase', () => ({
-  adminSupabase: {},
-}))
+vi.mock('../../../server/worker/lib/supabase', () => ({ adminSupabase: {} }))
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+const THREE_SCRIPTS = 'Script A\n---SCRIPT_BREAK---\nScript B\n---SCRIPT_BREAK---\nScript C'
+
+const BASE_JOB = {
+  id: 'job-1',
+  project_id: 'proj-1',
+  user_id: 'user-1',
+  provider: null,
+  model: null,
+}
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('script handler', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    process.env.ANTHROPIC_API_KEY = 'test-key'
+  beforeEach(() => vi.clearAllMocks())
+
+  it('fetches an API key for the resolved provider', async () => {
+    mockScriptGenerate.mockResolvedValueOnce({ text: THREE_SCRIPTS })
+    const { handleScriptJob } = await import('../../../server/worker/handlers/script')
+    await handleScriptJob({ ...BASE_JOB, input: { idea: 'Cats', tone: 'Documentary' } } as never)
+    expect(mockGetProviderKey).toHaveBeenCalledWith('anthropic', 'user-1')
   })
 
-  it('calls Claude with idea and tone from job input', async () => {
-    const THREE_SCRIPTS = 'Script A\n---SCRIPT_BREAK---\nScript B\n---SCRIPT_BREAK---\nScript C'
-    mockCreate.mockResolvedValueOnce({ content: [{ type: 'text', text: THREE_SCRIPTS }] })
-
+  it('forwards idea and tone to provider via userMessage', async () => {
+    mockScriptGenerate.mockResolvedValueOnce({ text: THREE_SCRIPTS })
     const { handleScriptJob } = await import('../../../server/worker/handlers/script')
-    const job = {
-      id: 'job-1', project_id: 'proj-1',
-      input: { idea: 'A documentary about cats', tone: 'Documentary' },
-    }
-    await handleScriptJob(job as never)
-
-    expect(mockCreate).toHaveBeenCalledOnce()
-    const callArg = mockCreate.mock.calls[0][0]
+    await handleScriptJob({ ...BASE_JOB, input: { idea: 'A documentary about cats', tone: 'Documentary' } } as never)
+    const callArg = mockScriptGenerate.mock.calls[0][0]
     expect(callArg.messages[0].content).toContain('A documentary about cats')
     expect(callArg.messages[0].content).toContain('Documentary')
   })
 
   it('stores three separate candidates on success', async () => {
-    const THREE_SCRIPTS = 'Script A\n---SCRIPT_BREAK---\nScript B\n---SCRIPT_BREAK---\nScript C'
-    mockCreate.mockResolvedValueOnce({ content: [{ type: 'text', text: THREE_SCRIPTS }] })
-
+    mockScriptGenerate.mockResolvedValueOnce({ text: THREE_SCRIPTS })
     const { handleScriptJob } = await import('../../../server/worker/handlers/script')
-    const job = {
-      id: 'job-1', project_id: 'proj-1',
-      input: { idea: 'Ocean life', tone: 'Educational' },
-    }
-    await handleScriptJob(job as never)
-
-    // storeTextOutput(job, text, label) — label is arg index 2
+    await handleScriptJob({ ...BASE_JOB, input: { idea: 'Ocean life', tone: 'Educational' } } as never)
     expect(mockStoreTextOutput).toHaveBeenCalledTimes(3)
     const labels = mockStoreTextOutput.mock.calls.map((c: unknown[]) => c[2] as string)
     expect(labels).toContain('script_candidate_1')
@@ -72,41 +68,42 @@ describe('script handler', () => {
   })
 
   it('marks job completed after successful generation', async () => {
-    const THREE_SCRIPTS = 'S1\n---SCRIPT_BREAK---\nS2\n---SCRIPT_BREAK---\nS3'
-    mockCreate.mockResolvedValueOnce({ content: [{ type: 'text', text: THREE_SCRIPTS }] })
-
+    mockScriptGenerate.mockResolvedValueOnce({ text: 'S1\n---SCRIPT_BREAK---\nS2\n---SCRIPT_BREAK---\nS3' })
     const { handleScriptJob } = await import('../../../server/worker/handlers/script')
-    await handleScriptJob({ id: 'job-1', project_id: 'proj-1', input: { idea: 'x', tone: 'Narrative' } } as never)
-
+    await handleScriptJob({ ...BASE_JOB, input: { idea: 'x', tone: 'Narrative' } } as never)
     expect(mockUpdateJobStatus).toHaveBeenCalledWith('job-1', 'completed', expect.anything())
   })
 
-  it('calls Claude with refinement_instructions when refining', async () => {
-    mockCreate.mockResolvedValueOnce({ content: [{ type: 'text', text: 'Refined script text' }] })
-
+  it('stores one output labeled script_refined when refining', async () => {
+    mockScriptGenerate.mockResolvedValueOnce({ text: 'Refined text' })
     const { handleScriptJob } = await import('../../../server/worker/handlers/script')
-    const job = {
-      id: 'job-2', project_id: 'proj-1',
-      input: {
-        existing_script: 'Original draft',
-        refinement_instructions: 'Make it shorter',
-      },
-    }
-    await handleScriptJob(job as never)
+    await handleScriptJob({
+      ...BASE_JOB,
+      id: 'job-2',
+      input: { existing_script: 'Original', refinement_instructions: 'Shorter' },
+    } as never)
+    expect(mockStoreTextOutput).toHaveBeenCalledTimes(1)
+    expect(mockStoreTextOutput.mock.calls[0][2]).toBe('script_refined')
+  })
 
-    const callArg = mockCreate.mock.calls[0][0]
+  it('passes refinement content to provider', async () => {
+    mockScriptGenerate.mockResolvedValueOnce({ text: 'Refined script text' })
+    const { handleScriptJob } = await import('../../../server/worker/handlers/script')
+    await handleScriptJob({
+      ...BASE_JOB,
+      input: { existing_script: 'Original draft', refinement_instructions: 'Make it shorter' },
+    } as never)
+    const callArg = mockScriptGenerate.mock.calls[0][0]
     expect(callArg.messages[0].content).toContain('Original draft')
     expect(callArg.messages[0].content).toContain('Make it shorter')
   })
 
-  it('propagates error when Claude throws (worker handles retry)', async () => {
-    mockCreate.mockRejectedValueOnce(new Error('API rate limit'))
-
+  it('propagates error from provider (worker retry loop handles it)', async () => {
+    mockScriptGenerate.mockRejectedValueOnce(new Error('API rate limit'))
     const { handleScriptJob } = await import('../../../server/worker/handlers/script')
     await expect(
-      handleScriptJob({ id: 'job-err', project_id: 'proj-1', input: { idea: 'x', tone: 'y' } } as never)
+      handleScriptJob({ ...BASE_JOB, input: { idea: 'x', tone: 'y' } } as never)
     ).rejects.toThrow('API rate limit')
-    // updateJobStatus is NOT called by the handler itself on error — the worker retry loop handles it
     expect(mockUpdateJobStatus).not.toHaveBeenCalledWith(expect.anything(), 'failed', expect.anything())
   })
 })

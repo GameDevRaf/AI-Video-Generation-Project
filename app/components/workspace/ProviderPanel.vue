@@ -24,7 +24,7 @@
             class="flex items-center justify-between px-5 py-3"
           >
             <div class="flex flex-col gap-0.5">
-              <span class="text-sm text-gray-200 capitalize">{{ key.provider }}</span>
+              <span class="text-sm text-gray-200">{{ displayName(key.provider) }}</span>
               <span class="text-xs text-gray-600">{{ key.key_name ?? 'Unnamed' }}</span>
             </div>
             <span class="text-xs text-green-400">✓ Active</span>
@@ -40,14 +40,24 @@
           <p class="text-xs text-gray-500">Quick-add a key</p>
           <select
             v-model="quickProvider"
-            class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none"
+            class="w-full px-3 py-2 bg-gray-800 border border-white/10 rounded-lg text-sm text-white focus:outline-none"
           >
-            <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.label }}</option>
+            <optgroup v-for="cat in CATEGORIES" :key="cat.id" :label="cat.label">
+              <option v-for="p in providersByCategory(cat.id)" :key="p.id" :value="p.id">
+                {{ p.displayName }}
+              </option>
+            </optgroup>
           </select>
+
+          <!-- Dual-credential note -->
+          <p v-if="selectedProviderMeta?.dualCredentials" class="text-xs text-amber-400/80 leading-snug">
+            {{ dualCredentialNote }}
+          </p>
+
           <input
             v-model="quickSecret"
             type="password"
-            placeholder="Paste API key…"
+            :placeholder="selectedProviderMeta?.dualCredentials ? 'Paste JSON credentials…' : 'Paste API key…'"
             class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none font-mono"
           />
           <button
@@ -64,18 +74,35 @@
 </template>
 
 <script setup lang="ts">
+import { PROVIDER_CATALOG, getCatalogByCategory } from '~/utils/providerCatalog'
+
 defineProps<{ open: boolean }>()
 defineEmits<{ close: [] }>()
 
-const providers = [
-  { id: 'anthropic', label: 'Anthropic' },
-  { id: 'elevenlabs', label: 'ElevenLabs' },
-  { id: 'openai', label: 'OpenAI' },
-  { id: 'stability', label: 'Stability AI' },
-  { id: 'fal', label: 'fal.ai' },
-  { id: 'runway', label: 'Runway' },
-  { id: 'kling', label: 'Kling' },
+const CATEGORIES = [
+  { id: 'script' as const, label: 'Script (LLM)' },
+  { id: 'image' as const, label: 'Image' },
+  { id: 'audio' as const, label: 'Audio / TTS' },
+  { id: 'video' as const, label: 'Video' },
 ]
+
+function providersByCategory(cat: 'script' | 'image' | 'audio' | 'video') {
+  return getCatalogByCategory(cat)
+}
+
+function displayName(providerId: string): string {
+  return PROVIDER_CATALOG.find(p => p.id === providerId)?.displayName ?? providerId
+}
+
+const selectedProviderMeta = computed(() =>
+  PROVIDER_CATALOG.find(p => p.id === quickProvider.value)
+)
+
+const dualCredentialNote = computed(() => {
+  const meta = selectedProviderMeta.value
+  if (!meta?.dualCredentials || !meta.dualCredentialFields) return ''
+  return `Requires two fields. Store as JSON: {"${meta.dualCredentialFields[0].replace(/\s.*/,'').toLowerCase()}":"...","${meta.dualCredentialFields[1].replace(/\s.*/,'').toLowerCase()}":"..."}`
+})
 
 interface ApiKeyMeta {
   id: string

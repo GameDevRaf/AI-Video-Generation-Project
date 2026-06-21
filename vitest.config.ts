@@ -10,6 +10,8 @@ export default defineVitestConfig({
       ['tests/unit/utils/**', 'node'],
       // Store tests need Vue auto-imports (ref, computed) → use nuxt env
       ['tests/unit/stores/**', 'nuxt'],
+      // Provider adapter unit tests — node only (all HTTP mocked)
+      ['tests/unit/providers/**', 'node'],
       // Worker handler integration tests run in node (all Nuxt deps are mocked)
       ['tests/integration/**', 'node'],
     ],

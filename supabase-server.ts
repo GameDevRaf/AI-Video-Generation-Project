@@ -64,6 +64,10 @@ export async function serverSupabaseUser(event: H3Event): Promise<SupabaseUser |
   const { data, error } = await client.auth.getUser()
 
   if (error) {
+    // AuthSessionMissingError means unauthenticated (no cookie) — return null so routes send 401
+    if (error.name === 'AuthSessionMissingError' || error.message?.includes('Auth session missing')) {
+      return null
+    }
     throw createError({ statusCode: 500, statusMessage: error.message })
   }
 

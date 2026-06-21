@@ -6,10 +6,16 @@ export default defineEventHandler(async (event) => {
 
   const body = await readBody<{
     prompt_edit_mode?: string
+    // provider selections (migration 004)
+    default_script_provider?: string
+    default_image_provider?: string
     default_audio_provider?: string
+    default_video_provider?: string
+    // legacy model fields
     default_audio_voice_id?: string
     default_image_model?: string
     default_video_model?: string
+    default_audio_model?: string
     default_music_model?: string
   }>(event)
 

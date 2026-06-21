@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+/* Native <select> dropdown list inherits browser chrome — force dark theme globally */
+select {
+  background-color: #1e2433;
+  color: #f1f5f9;
+}
+
+select option {
+  background-color: #1e2433;
+  color: #f1f5f9;
+}
+
+select option:hover,
+select option:focus,
+select option:checked {
+  background-color: #2d3748;
+  color: #ffffff;
+}
