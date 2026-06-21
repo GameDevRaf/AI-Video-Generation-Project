@@ -15,7 +15,7 @@ values (
   array[
     'image/png', 'image/jpeg', 'image/webp', 'image/gif',
     'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/x-wav',
-    'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'
+    'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/matroska'
   ]
 )
 on conflict (id) do nothing;

@@ -45,12 +45,25 @@
         :image-url="imageStage.getImage(scene)"
         :generating="generatingSceneId === scene.id"
         :generating-prompt="promptsRunning || singlePromptRunning && regeneratingPromptSceneId === scene.id"
+        :uploading="uploadingSceneId === scene.id"
         :provider-error="imageProviderError"
         @save-prompt="imageStage.savePrompt"
         @generate-image="generateImage"
         @regenerate-prompt="generateSinglePrompt"
+        @upload-image="uploadImage"
+        @view-image="openPreview"
       />
     </div>
+
+    <MediaPreviewModal
+      v-if="previewUrl"
+      :open="!!previewUrl"
+      :url="previewUrl"
+      type="image"
+      :title="previewTitle"
+      :download-name="previewDownloadName"
+      @close="closePreview"
+    />
 
     <!-- Continue -->
     <div v-if="scenes.length" class="pt-2">
@@ -82,7 +95,9 @@ const { job: imageJob, isRunning: imageJobRunning, startJob: startImageJob } = u
 
 const generatingSceneId = ref<string | null>(null)
 const regeneratingPromptSceneId = ref<string | null>(null)
+const uploadingSceneId = ref<string | null>(null)
 const imageProviderError = ref<string | undefined>(undefined)
+const previewSceneId = ref<string | null>(null)
 
 const promptEditMode = computed(() => props.promptEditMode ?? 'after_generation')
 const hasAnyPrompt = computed(() => imageStage.prompts.value.size > 0)
@@ -146,5 +161,47 @@ async function generateImage(sceneId: string, prompt: string) {
     imageProviderError.value = 'Failed to start image job.'
     generatingSceneId.value = null
   }
+}
+
+async function uploadImage(sceneId: string, file: File) {
+  uploadingSceneId.value = sceneId
+  imageProviderError.value = undefined
+  try {
+    const formData = new FormData()
+    formData.append('projectId', props.projectId)
+    formData.append('sceneId', sceneId)
+    formData.append('type', 'image')
+    formData.append('file', file)
+
+    await $fetch('/api/uploads/media', {
+      method: 'POST',
+      body: formData,
+    })
+    await imageStage.fetchImages()
+  } catch (error) {
+    imageProviderError.value = error instanceof Error ? error.message : 'Image upload failed.'
+  } finally {
+    uploadingSceneId.value = null
+  }
+}
+
+const previewUrl = computed(() => {
+  if (!previewSceneId.value) return null
+  return imageStage.images.value.get(previewSceneId.value) ?? null
+})
+
+const previewTitle = computed(() => {
+  const scene = scenes.value.find(s => s.id === previewSceneId.value)
+  return scene ? `Scene ${scene.order_index + 1}${scene.title ? ` - ${scene.title}` : ''}` : 'Scene image'
+})
+
+const previewDownloadName = computed(() => `${previewTitle.value.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`)
+
+function openPreview(sceneId: string) {
+  previewSceneId.value = sceneId
+}
+
+function closePreview() {
+  previewSceneId.value = null
 }
 </script>

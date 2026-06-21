@@ -84,12 +84,27 @@
         :image-url="null"
         :is-active="activeSceneId === scene.id"
         :generating="generatingSceneId === scene.id"
-        :provider-error="generatingSceneId === scene.id ? providerError : undefined"
+        :generating-prompt="singlePromptRunning && regeneratingPromptSceneId === scene.id"
+        :uploading="uploadingSceneId === scene.id"
+        :provider-error="generatingSceneId === scene.id || uploadingSceneId === scene.id ? providerError : undefined"
         @save-prompt="videoStage.savePrompt"
         @generate-video="generateSingleVideo"
+        @regenerate-prompt="generateSinglePrompt"
+        @upload-video="uploadVideo"
+        @view-video="openPreview"
         @select="activeSceneId = $event"
       />
     </div>
+
+    <MediaPreviewModal
+      v-if="previewUrl"
+      :open="!!previewUrl"
+      :url="previewUrl"
+      type="video"
+      :title="previewTitle"
+      :download-name="previewDownloadName"
+      @close="closePreview"
+    />
 
     <!-- Continue -->
     <div v-if="scenes.length" class="pt-2">
@@ -113,11 +128,15 @@ const { scenes, loading: scenesLoading, fetchScenes } = useScenes(toRef(props, '
 const videoStage = useVideoStage(toRef(props, 'projectId'))
 
 const { job: promptsJob, isRunning: promptsRunning, error: promptsError, startJob: startPromptsJob } = useJobPoller()
+const { job: singlePromptJob, isRunning: singlePromptRunning, startJob: startSinglePromptJob } = useJobPoller()
 const { job: videoJob, isRunning: videosRunning, error: videosError, startJob: startVideoJob } = useJobPoller()
 
 const activeSceneId = ref<string | null>(null)
 const generatingSceneId = ref<string | null>(null)
+const regeneratingPromptSceneId = ref<string | null>(null)
+const uploadingSceneId = ref<string | null>(null)
 const providerError = ref<string | undefined>(undefined)
+const previewSceneId = ref<string | null>(null)
 
 onMounted(async () => {
   await fetchScenes()
@@ -127,6 +146,15 @@ onMounted(async () => {
 
 watch(promptsJob, async (j) => {
   if (j?.status === 'completed') await videoStage.fetchPrompts()
+})
+
+watch(singlePromptJob, async (j) => {
+  if (j?.status === 'completed') {
+    await videoStage.fetchPrompts()
+    regeneratingPromptSceneId.value = null
+  } else if (j?.status === 'failed') {
+    regeneratingPromptSceneId.value = null
+  }
 })
 
 // After a single video job finishes, reload videos and clear the loading state
@@ -142,6 +170,11 @@ watch(videoJob, async (j) => {
 
 async function generateAllPrompts() {
   await startPromptsJob(props.projectId, 'video_prompt', {})
+}
+
+async function generateSinglePrompt(sceneId: string) {
+  regeneratingPromptSceneId.value = sceneId
+  await startSinglePromptJob(props.projectId, 'video_prompt', { scene_id: sceneId })
 }
 
 async function generateAllVideos() {
@@ -189,5 +222,48 @@ async function generateSingleVideo(sceneId: string, prompt: string) {
     providerError.value = 'Failed to start video job.'
     generatingSceneId.value = null
   }
+}
+
+async function uploadVideo(sceneId: string, file: File) {
+  uploadingSceneId.value = sceneId
+  providerError.value = undefined
+  try {
+    const formData = new FormData()
+    formData.append('projectId', props.projectId)
+    formData.append('sceneId', sceneId)
+    formData.append('type', 'video')
+    formData.append('file', file)
+
+    await $fetch('/api/uploads/media', {
+      method: 'POST',
+      body: formData,
+    })
+    await videoStage.fetchVideos()
+    activeSceneId.value = sceneId
+  } catch (error) {
+    providerError.value = error instanceof Error ? error.message : 'Video upload failed.'
+  } finally {
+    uploadingSceneId.value = null
+  }
+}
+
+const previewUrl = computed(() => {
+  if (!previewSceneId.value) return null
+  return videoStage.videos.value.get(previewSceneId.value) ?? null
+})
+
+const previewTitle = computed(() => {
+  const scene = scenes.value.find(s => s.id === previewSceneId.value)
+  return scene ? `Scene ${scene.order_index + 1}${scene.title ? ` - ${scene.title}` : ''}` : 'Scene video'
+})
+
+const previewDownloadName = computed(() => `${previewTitle.value.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.mp4`)
+
+function openPreview(sceneId: string) {
+  previewSceneId.value = sceneId
+}
+
+function closePreview() {
+  previewSceneId.value = null
 }
 </script>

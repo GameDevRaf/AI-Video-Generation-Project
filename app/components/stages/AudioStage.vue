@@ -72,7 +72,7 @@
       </div>
     </div>
 
-    <!-- Generate button -->
+    <!-- Generate and upload controls -->
     <div class="flex items-center gap-4 flex-wrap">
       <button
         :disabled="isRunning || !fullScriptText"
@@ -86,8 +86,24 @@
         <span v-else>{{ audioUrl ? 'Regenerate audio' : 'Generate audio' }}</span>
       </button>
 
-      <p v-if="jobError || (job?.status === 'failed')" class="text-sm text-amber-400/80">
-        {{ job?.error_message ?? jobError ?? 'Audio generation failed.' }}
+      <input
+        ref="audioInput"
+        type="file"
+        accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/x-wav"
+        class="hidden"
+        @change="onAudioFileChange"
+      />
+      <button
+        :disabled="uploadingAudio"
+        class="px-5 py-2 border border-white/15 text-gray-200 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors disabled:opacity-40"
+        @click="audioInput?.click()"
+      >
+        <span v-if="uploadingAudio">Uploading audio...</span>
+        <span v-else>{{ audioUrl ? 'Replace with upload' : 'Upload audio' }}</span>
+      </button>
+
+      <p v-if="jobError || uploadError || (job?.status === 'failed')" class="text-sm text-amber-400/80">
+        {{ job?.error_message ?? jobError ?? uploadError ?? 'Audio generation failed.' }}
       </p>
     </div>
 
@@ -127,6 +143,9 @@ const { settings, audioUrl, currentVoices } = audioStage
 
 const { scenes, fetchScenes } = useScenes(toRef(props, 'projectId'))
 const { job, isRunning, error: jobError, startJob } = useJobPoller()
+const audioInput = ref<HTMLInputElement | null>(null)
+const uploadingAudio = ref(false)
+const uploadError = ref<string | null>(null)
 
 // Derive the voiceover text from each scene's script_text (spoken words only).
 // Using scenes as the source of truth is safer than the raw full script, because
@@ -164,5 +183,31 @@ async function generate() {
     stability: settings.value.stability,
     similarity_boost: settings.value.similarityBoost,
   })
+}
+
+async function onAudioFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  uploadingAudio.value = true
+  uploadError.value = null
+  try {
+    const formData = new FormData()
+    formData.append('projectId', props.projectId)
+    formData.append('type', 'audio')
+    formData.append('file', file)
+
+    await $fetch('/api/uploads/media', {
+      method: 'POST',
+      body: formData,
+    })
+    await audioStage.fetchExistingAudio()
+  } catch (error) {
+    uploadError.value = error instanceof Error ? error.message : 'Audio upload failed.'
+  } finally {
+    uploadingAudio.value = false
+  }
 }
 </script>

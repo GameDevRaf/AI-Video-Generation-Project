@@ -1,7 +1,21 @@
 <template>
-  <div class="flex flex-col gap-4 p-5 rounded-xl border border-white/10 bg-white/3">
+  <div class="relative flex flex-col gap-4 p-5 rounded-xl border border-white/10 bg-white/3">
+    <button
+      class="absolute right-4 top-4 w-8 h-8 rounded-full bg-black/40 border border-white/10 text-white/70 hover:text-white hover:bg-black/60 flex items-center justify-center transition-colors disabled:opacity-50"
+      title="Download audio"
+      :disabled="downloading"
+      @click="downloadAudio"
+    >
+      <span v-if="downloading" class="inline-block w-3.5 h-3.5 border-2 border-white/50 border-t-transparent rounded-full animate-spin" />
+      <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <path d="M7 10l5 5 5-5"/>
+        <path d="M12 15V3"/>
+      </svg>
+    </button>
+
     <!-- Current scene image + script highlight -->
-    <div class="flex gap-4">
+    <div class="flex gap-4 pr-10">
       <!-- Scene image -->
       <div class="w-32 shrink-0 aspect-video rounded-lg overflow-hidden bg-white/5 border border-white/8 flex items-center justify-center">
         <img
@@ -104,6 +118,7 @@ const playing = ref(false)
 const currentTime = ref(0)
 const duration = ref(0)
 const playbackRate = ref<number>(1)
+const downloading = ref(false)
 
 const progress = computed(() => duration.value ? currentTime.value / duration.value : 0)
 
@@ -157,6 +172,36 @@ function seek(e: MouseEvent) {
 
 function applyRate() {
   if (audioEl.value) audioEl.value.playbackRate = Number(playbackRate.value)
+}
+
+async function downloadAudio() {
+  downloading.value = true
+  try {
+    const response = await fetch(props.audioUrl)
+    if (!response.ok) throw new Error(`Download failed: ${response.status}`)
+
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = objectUrl
+    anchor.download = `audio-track.${extensionFromAudioUrl()}`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(objectUrl)
+  } finally {
+    downloading.value = false
+  }
+}
+
+function extensionFromAudioUrl(): string {
+  try {
+    const path = new URL(props.audioUrl).pathname
+    const extension = path.split('.').pop()?.toLowerCase()
+    return extension && extension.length <= 5 ? extension : 'mp3'
+  } catch {
+    return 'mp3'
+  }
 }
 
 function formatTime(s: number): string {

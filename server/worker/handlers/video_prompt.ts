@@ -23,10 +23,15 @@ function extractJsonArray(text: string): string {
 }
 
 export async function handleVideoPromptJob(job: DbJob) {
-  const { data: scenes } = await adminSupabase
+  const input = job.input as { scene_id?: string } | null
+  let query = adminSupabase
     .from('scenes')
     .select('id, title, script_text, duration')
     .eq('project_id', job.project_id)
+
+  if (input?.scene_id) query = query.eq('id', input.scene_id)
+
+  const { data: scenes } = await query
     .order('order_index')
 
   if (!scenes?.length) throw new Error('No scenes found')

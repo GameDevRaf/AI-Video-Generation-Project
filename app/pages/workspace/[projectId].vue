@@ -70,7 +70,7 @@
           <!-- Video tab: video generation + export when reached -->
           <template v-else-if="activeTab === 'video'">
             <StagesVideoStage :project-id="projectId" @done="onVideoDone" />
-            <div v-if="showExport" class="border-t border-white/5">
+            <div v-if="showExport" ref="exportSection" class="border-t border-white/5">
               <StagesExportStage :project-id="projectId" />
             </div>
           </template>
@@ -115,6 +115,7 @@ const providerPanelOpen = ref(false)
 const restoring = ref(true)
 const activeTab = ref<TabId>('script')
 const slideDirection = ref<'left' | 'right'>('left')
+const exportSection = ref<HTMLElement | null>(null)
 
 const project = computed(() => projectStore.currentProject)
 const projectSettings = computed(() => projectStore.settings)
@@ -229,6 +230,9 @@ function onAudioDone() {
 function onVideoDone() {
   // Export appears below VideoStage in the same tab
   projectStore.setStage('export')
+  nextTick(() => {
+    exportSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
 }
 </script>
 
