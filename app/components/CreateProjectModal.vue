@@ -6,7 +6,7 @@
     >
       <div class="w-full max-w-md bg-gray-900 border border-white/10 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl">
         <div class="flex items-center justify-between">
-          <h2 class="text-base font-semibold">New project</h2>
+          <h2 class="text-base font-semibold text-white">New project</h2>
           <button
             class="text-gray-500 hover:text-white transition-colors"
             @click="$emit('close')"

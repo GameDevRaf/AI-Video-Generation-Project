@@ -23,11 +23,11 @@
 
       <!-- Generate all videos -->
       <button
-        :disabled="videosRunning || !videoStage.hasAnyPrompt.value || !scenes.length"
+        :disabled="generatingAllVideos || videosRunning || !videoStage.hasAnyPrompt.value || !scenes.length"
         class="px-5 py-2 border border-white/15 text-gray-200 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors disabled:opacity-40"
         @click="generateAllVideos"
       >
-        <span v-if="videosRunning" class="flex items-center gap-2">
+        <span v-if="generatingAllVideos || videosRunning" class="flex items-center gap-2">
           <span class="inline-block w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
           Generating videos…
         </span>
@@ -81,7 +81,7 @@
         :scene="scene"
         :prompt="videoStage.getPrompt(scene.id)"
         :video-url="videoStage.getVideo(scene.id)"
-        :image-url="null"
+        :image-url="imageStage.getImage(scene)"
         :is-active="activeSceneId === scene.id"
         :generating="generatingSceneId === scene.id"
         :generating-prompt="singlePromptRunning && regeneratingPromptSceneId === scene.id"
@@ -126,6 +126,7 @@ const projectStore = useProjectStore()
 
 const { scenes, loading: scenesLoading, fetchScenes } = useScenes(toRef(props, 'projectId'))
 const videoStage = useVideoStage(toRef(props, 'projectId'))
+const imageStage = useImageStage(toRef(props, 'projectId'))
 
 const { job: promptsJob, isRunning: promptsRunning, error: promptsError, startJob: startPromptsJob } = useJobPoller()
 const { job: singlePromptJob, isRunning: singlePromptRunning, startJob: startSinglePromptJob } = useJobPoller()
@@ -133,6 +134,7 @@ const { job: videoJob, isRunning: videosRunning, error: videosError, startJob: s
 
 const activeSceneId = ref<string | null>(null)
 const generatingSceneId = ref<string | null>(null)
+const generatingAllVideos = ref(false)
 const regeneratingPromptSceneId = ref<string | null>(null)
 const uploadingSceneId = ref<string | null>(null)
 const providerError = ref<string | undefined>(undefined)
@@ -140,7 +142,7 @@ const previewSceneId = ref<string | null>(null)
 
 onMounted(async () => {
   await fetchScenes()
-  await Promise.all([videoStage.fetchPrompts(), videoStage.fetchVideos()])
+  await Promise.all([videoStage.fetchPrompts(), videoStage.fetchVideos(), imageStage.fetchImages()])
   if (scenes.value.length) activeSceneId.value = scenes.value[0].id
 })
 
@@ -178,31 +180,38 @@ async function generateSinglePrompt(sceneId: string) {
 }
 
 async function generateAllVideos() {
-  // Fire all video jobs in parallel (each takes 60–120 s; sequential would be too slow)
+  if (generatingAllVideos.value) return
+  generatingAllVideos.value = true
+  // Fire all video jobs in parallel (each takes 60–120 s; sequential would be too slow).
+  // Server-side dedup returns any already-queued job instead of creating a duplicate.
   const provider = projectStore.settings?.default_video_provider ?? undefined
   const model = projectStore.settings?.default_video_model ?? undefined
-  await Promise.all(
-    scenes.value
-      .filter(s => videoStage.getPrompt(s.id))
-      .map(s =>
-        $fetch('/api/jobs', {
-          method: 'POST',
-          body: {
-            projectId: props.projectId,
-            type: 'video',
-            input: {
-              scene_id: s.id,
-              prompt: videoStage.getPrompt(s.id),
-              ...(provider ? { provider } : {}),
-              ...(model ? { model } : {}),
+  try {
+    await Promise.all(
+      scenes.value
+        .filter(s => videoStage.getPrompt(s.id))
+        .map(s => {
+          const imageUrl = imageStage.getImage(s) ?? undefined
+          return $fetch('/api/jobs', {
+            method: 'POST',
+            body: {
+              projectId: props.projectId,
+              type: 'video',
+              input: {
+                scene_id: s.id,
+                prompt: videoStage.getPrompt(s.id),
+                ...(imageUrl ? { image_url: imageUrl } : {}),
+                ...(provider ? { provider } : {}),
+                ...(model ? { model } : {}),
+              },
             },
-          },
-        }).catch(() => null),
-      ),
-  )
-  // Jobs are now queued in the worker; poll until the first completes so the UI updates,
-  // then let VideoSceneCard individual buttons handle the rest.
-  await videoStage.fetchVideos()
+          }).catch(() => null)
+        }),
+    )
+    await videoStage.fetchVideos()
+  } finally {
+    generatingAllVideos.value = false
+  }
 }
 
 async function generateSingleVideo(sceneId: string, prompt: string) {
@@ -210,10 +219,13 @@ async function generateSingleVideo(sceneId: string, prompt: string) {
   providerError.value = undefined
   const provider = projectStore.settings?.default_video_provider ?? undefined
   const model = projectStore.settings?.default_video_model ?? undefined
+  const scene = scenes.value.find(s => s.id === sceneId)
+  const imageUrl = scene ? (imageStage.getImage(scene) ?? undefined) : undefined
   try {
     await startVideoJob(props.projectId, 'video', {
       scene_id: sceneId,
       prompt,
+      ...(imageUrl ? { image_url: imageUrl } : {}),
       ...(provider ? { provider } : {}),
       ...(model ? { model } : {}),
     })

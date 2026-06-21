@@ -159,6 +159,31 @@ const selectedModelId = ref(
     ?? ''
 )
 
+// Re-evaluate the displayed provider whenever: the tab changes, the project's saved
+// provider setting arrives, or the user's list of API keys changes.
+// Also emits providerChanged so generate() functions read the correct provider
+// from projectStore.settings rather than a stale default.
+watch(
+  [() => props.stage, () => props.initialProviderId, () => props.savedProviderIds],
+  ([, newInitialId]) => {
+    let id: string
+    if (newInitialId) {
+      id = newInitialId
+    } else {
+      const firstWithKey = providers.value.find(p => props.savedProviderIds.includes(p.id))
+      id = firstWithKey?.id ?? DEFAULTS[props.stage]
+    }
+    const model = (newInitialId && props.initialModelId)
+      ? props.initialModelId
+      : PROVIDER_CATALOG.find(p => p.id === id)?.defaultModel ?? ''
+
+    selectedProviderId.value = id
+    selectedModelId.value = model
+    emitChange()
+  },
+  { immediate: true },
+)
+
 const currentProviderMeta = computed(() =>
   PROVIDER_CATALOG.find(p => p.id === selectedProviderId.value)
 )

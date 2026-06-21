@@ -6,6 +6,7 @@ export type JobWithOutputs = DbJob & { job_outputs: DbJobOutput[] }
 export function useJobPoller() {
   const job = ref<JobWithOutputs | null>(null)
   const polling = ref(false)
+  const starting = ref(false)
   const error = ref<string | null>(null)
 
   const { pause, resume } = useIntervalFn(async () => {
@@ -25,28 +26,40 @@ export function useJobPoller() {
   }, 2000, { immediate: false })
 
   async function startJob(projectId: string, type: string, input: Record<string, unknown>) {
+    // Drop concurrent calls — the button should be disabled by isRunning, but guard
+    // against the async gap between click and polling becoming true.
+    if (starting.value || polling.value) return
+    starting.value = true
     error.value = null
     job.value = null
 
-    const created = await $fetch<JobWithOutputs>('/api/jobs', {
-      method: 'POST',
-      body: { projectId, type, input },
-    })
-    job.value = created
-    polling.value = true
-    resume()
-    return created
+    try {
+      const created = await $fetch<JobWithOutputs>('/api/jobs', {
+        method: 'POST',
+        body: { projectId, type, input },
+      })
+      job.value = created
+      polling.value = true
+      resume()
+      return created
+    } finally {
+      starting.value = false
+    }
   }
 
   function reset() {
     pause()
     job.value = null
     polling.value = false
+    starting.value = false
     error.value = null
   }
 
   const isRunning = computed(() =>
-    polling.value || (job.value?.status === 'queued' || job.value?.status === 'processing'),
+    starting.value
+    || polling.value
+    || job.value?.status === 'queued'
+    || job.value?.status === 'processing',
   )
   const isDone = computed(() => job.value?.status === 'completed')
   const isFailed = computed(() => job.value?.status === 'failed')

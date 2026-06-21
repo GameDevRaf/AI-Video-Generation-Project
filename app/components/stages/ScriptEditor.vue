@@ -105,11 +105,8 @@ async function refine() {
 
 async function useScript() {
   workspace.setActiveScript(text.value, props.outputId)
-  // Advance project stage to scene_split
-  await $fetch(`/api/projects/${props.projectId}`, {
-    method: 'PATCH',
-    body: { current_stage: 'scene_split' },
-  })
+  // Stage advancement is handled by the parent page via projectStore.setStage,
+  // which keeps the Pinia store and DB in sync.
   emit('use', text.value)
 }
 </script>

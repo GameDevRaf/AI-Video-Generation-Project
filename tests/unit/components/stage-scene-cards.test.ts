@@ -72,21 +72,4 @@ describe('stage scene cards', () => {
     expect(wrapper.emitted('regenerate-prompt')).toEqual([['scene-1']])
   })
 
-  it('emits view-video when the selected video preview button is clicked', async () => {
-    const wrapper = mount(VideoSceneCard, {
-      props: {
-        scene,
-        prompt: 'slow dolly in',
-        videoUrl: 'https://cdn.test/scene.mp4',
-        imageUrl: null,
-        isActive: true,
-        generating: false,
-        generatingPrompt: false,
-      },
-    })
-
-    await wrapper.get('[data-testid="video-preview-button"]').trigger('click')
-
-    expect(wrapper.emitted('view-video')).toEqual([['scene-1']])
-  })
 })

@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Tailwind resets button cursor to default — restore pointer for all interactive buttons */
+button:not(:disabled) {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
 /* Native <select> dropdown list inherits browser chrome — force dark theme globally */
 select {
   background-color: #1e2433;

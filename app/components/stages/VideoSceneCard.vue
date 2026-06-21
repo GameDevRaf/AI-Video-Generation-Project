@@ -21,22 +21,8 @@
         loop
         @click="$emit('select', scene.id)"
       />
-      <button
-        v-if="videoUrl && isActive"
-        class="absolute right-2 top-2 w-8 h-8 rounded-full bg-black/65 border border-white/15 text-white/80 hover:text-white hover:bg-black/85 flex items-center justify-center transition-colors"
-        title="Preview video"
-        data-testid="video-preview-button"
-        @click.stop="$emit('view-video', scene.id)"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M15 3h6v6"/>
-          <path d="m21 3-7 7"/>
-          <path d="M9 21H3v-6"/>
-          <path d="m3 21 7-7"/>
-        </svg>
-      </button>
       <div
-        v-else
+        v-if="!videoUrl"
         class="w-full h-full flex items-center justify-center cursor-pointer"
         @click="$emit('select', scene.id)"
       >
@@ -46,13 +32,6 @@
           :alt="`Scene ${scene.order_index + 1} frame`"
           class="w-full h-full object-cover opacity-60"
         />
-        <div class="absolute inset-0 flex items-center justify-center">
-          <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white/60" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z"/>
-            </svg>
-          </div>
-        </div>
       </div>
     </div>
 
