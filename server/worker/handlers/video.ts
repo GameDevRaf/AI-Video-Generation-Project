@@ -29,10 +29,10 @@ export async function handleVideoJob(job: DbJob) {
 
   await updateJobStatus(job.id, 'waiting_on_provider', {})
 
-  const apiKey = await getProviderKey(providerId, job.user_id)
+  const apiKey = await getProviderKey(meta?.keyProviderId ?? providerId, job.user_id)
   const provider = providerRegistry.video(providerId)
 
-  const { videoUrl } = await provider.generate({
+  const result = await provider.generate({
     job,
     apiKey,
     model,
@@ -42,7 +42,11 @@ export async function handleVideoJob(job: DbJob) {
     aspectRatio: input.aspect_ratio ?? '16:9',
   })
 
-  const { buffer, mime } = await downloadVideoUrl(videoUrl)
+  // Providers like Veo and HF return rawBuffer directly (auth-gated or inline bytes)
+  const { buffer, mime } = result.rawBuffer
+    ? { buffer: result.rawBuffer, mime: result.mimeType ?? 'video/mp4' }
+    : await downloadVideoUrl(result.videoUrl!)
+
   const ext = mime.split('/')[1]?.split(';')[0] ?? 'mp4'
   const storagePath = `${job.project_id}/videos/${input.scene_id}_${Date.now()}.${ext}`
 

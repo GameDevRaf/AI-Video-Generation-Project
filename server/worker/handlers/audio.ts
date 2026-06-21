@@ -23,13 +23,16 @@ export async function handleAudioJob(job: DbJob) {
     openai_tts: 'onyx',
     playht: 's3://voice-cloning-zero-shot/d9ff78ba-d016-47f6-b0ef-dd630f59414e/female-cs/manifest.json',
     cartesia: '694f9389-aac1-45b6-b726-9d9369183238',  // Barbershop Man
+    fish_audio: '',   // Voice set via reference_id; omit for Fish Audio default
+    gemini_tts: 'Kore',  // One of 30 built-in Gemini TTS voices
+    huggingface_audio: '',  // No voice ID concept for HF models
   }
 
   const voiceId = input.voice_id ?? DEFAULT_VOICES[providerId] ?? ''
 
   await updateJobStatus(job.id, 'waiting_on_provider', {})
 
-  const apiKey = await getProviderKey(providerId, job.user_id)
+  const apiKey = await getProviderKey(meta?.keyProviderId ?? providerId, job.user_id)
   const provider = providerRegistry.audio(providerId)
 
   const { audioBuffer, mimeType } = await provider.generate({

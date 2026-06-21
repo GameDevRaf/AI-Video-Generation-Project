@@ -45,7 +45,7 @@
               </div>
               <div class="flex items-center gap-2 shrink-0">
                 <span
-                  v-if="savedProviderIds.includes(provider.id)"
+                  v-if="savedProviderIds.includes(provider.keyProviderId ?? provider.id)"
                   class="text-xs text-green-400/80 bg-green-400/10 px-2 py-0.5 rounded-full"
                 >
                   ✓ key saved
@@ -71,7 +71,7 @@
                 <template v-if="provider.dualCredentials && provider.dualCredentialFields">
                   Store both credentials as JSON: <code class="bg-white/5 px-1 rounded text-amber-300">{{ '{"' + provider.dualCredentialFields[0].split(' ')[0].toLowerCase() + '":"...","' + provider.dualCredentialFields[1].split(' ')[0].toLowerCase() + '":"..."}' }}</code>
                 </template>
-                <template v-else>Paste your {{ provider.displayName }} API key.</template>
+                <template v-else>Paste your {{ provider.keyDisplayName ?? provider.displayName }} API key.</template>
               </div>
               <input
                 v-model="inlineKeyValue"
@@ -170,7 +170,7 @@ watch(
     if (newInitialId) {
       id = newInitialId
     } else {
-      const firstWithKey = providers.value.find(p => props.savedProviderIds.includes(p.id))
+      const firstWithKey = providers.value.find(p => props.savedProviderIds.includes(p.keyProviderId ?? p.id))
       id = firstWithKey?.id ?? DEFAULTS[props.stage]
     }
     const model = (newInitialId && props.initialModelId)
@@ -195,7 +195,9 @@ const activeModelLabel = computed(() =>
 )
 
 function selectProvider(id: string) {
-  if (!props.savedProviderIds.includes(id)) {
+  const meta = PROVIDER_CATALOG.find(p => p.id === id)
+  const keyId = meta?.keyProviderId ?? id
+  if (!props.savedProviderIds.includes(keyId)) {
     inlineKeyForProvider.value = inlineKeyForProvider.value === id ? null : id
     inlineKeyValue.value = ''
     return
@@ -223,9 +225,12 @@ async function saveInlineKey(providerId: string) {
   if (!inlineKeyValue.value.trim()) return
   savingKey.value = true
   try {
+    const meta = PROVIDER_CATALOG.find(p => p.id === providerId)
+    // Store under the shared key provider ID (e.g. nanobanana → gemini, veo → gemini)
+    const storeUnder = meta?.keyProviderId ?? providerId
     await $fetch<ApiKeyMeta>('/api/provider/keys', {
       method: 'POST',
-      body: { provider: providerId, secret: inlineKeyValue.value.trim() },
+      body: { provider: storeUnder, secret: inlineKeyValue.value.trim() },
     })
     inlineKeyForProvider.value = null
     inlineKeyValue.value = ''

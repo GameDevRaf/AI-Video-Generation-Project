@@ -13,6 +13,14 @@ export interface ProviderMeta {
   /** Provider IDs that require two credentials stored as JSON (e.g. kling, playht) */
   dualCredentials?: boolean
   dualCredentialFields?: [string, string]
+  /**
+   * When set, this provider shares an API key with another provider.
+   * The key lookup and inline-key storage both use this ID instead of `id`.
+   * E.g. nanobanana, veo, gemini_tts all use the 'gemini' key.
+   */
+  keyProviderId?: string
+  /** Display name shown in the "Paste your X API key" inline form. Defaults to displayName. */
+  keyDisplayName?: string
 }
 
 export const PROVIDER_CATALOG: ProviderMeta[] = [
@@ -59,6 +67,29 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
       { id: 'mistral-small-latest', label: 'Mistral Small' },
     ],
   },
+  {
+    id: 'openrouter', displayName: 'OpenRouter', category: 'script',
+    defaultModel: 'openai/gpt-4o-mini', asyncPattern: 'sync',
+    models: [
+      { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
+      { id: 'openai/gpt-4.1', label: 'GPT-4.1' },
+      { id: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' },
+      { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      { id: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B' },
+      { id: 'deepseek/deepseek-chat', label: 'DeepSeek Chat' },
+    ],
+  },
+  {
+    id: 'huggingface', displayName: 'Hugging Face', category: 'script',
+    defaultModel: 'deepseek-ai/DeepSeek-V3', asyncPattern: 'sync',
+    keyDisplayName: 'Hugging Face Token',
+    models: [
+      { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek V3' },
+      { id: 'meta-llama/Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B' },
+      { id: 'mistralai/Mistral-7B-Instruct-v0.3', label: 'Mistral 7B' },
+      { id: 'Qwen/Qwen2.5-72B-Instruct', label: 'Qwen 2.5 72B' },
+    ],
+  },
 
   // ── Image ────────────────────────────────────────────────
   {
@@ -101,6 +132,39 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
       { id: 'black-forest-labs/FLUX.1-schnell', label: 'FLUX.1 Schnell' },
     ],
   },
+  {
+    id: 'nanobanana', displayName: 'Nano Banana (Google)', category: 'image',
+    defaultModel: 'gemini-3.1-flash-image', asyncPattern: 'sync',
+    keyProviderId: 'gemini',
+    keyDisplayName: 'Google AI Studio / Gemini',
+    models: [
+      { id: 'gemini-3.1-flash-image', label: 'Nano Banana 2 (3.1 Flash)' },
+      { id: 'gemini-3-pro-image', label: 'Nano Banana Pro' },
+      { id: 'gemini-2.5-flash-image', label: 'Nano Banana (2.5 Flash)' },
+    ],
+  },
+  {
+    id: 'replicate', displayName: 'Replicate', category: 'image',
+    defaultModel: 'black-forest-labs/flux-schnell', asyncPattern: 'polling',
+    models: [
+      { id: 'black-forest-labs/flux-schnell', label: 'FLUX Schnell (fast)' },
+      { id: 'black-forest-labs/flux-1.1-pro', label: 'FLUX 1.1 Pro' },
+      { id: 'stability-ai/stable-diffusion-3.5-large', label: 'SD 3.5 Large' },
+      { id: 'recraft-ai/recraft-v3', label: 'Recraft v3' },
+    ],
+  },
+  {
+    id: 'huggingface_image', displayName: 'Hugging Face', category: 'image',
+    defaultModel: 'black-forest-labs/FLUX.1-schnell', asyncPattern: 'sync',
+    keyProviderId: 'huggingface',
+    keyDisplayName: 'Hugging Face Token',
+    models: [
+      { id: 'black-forest-labs/FLUX.1-schnell', label: 'FLUX.1 Schnell' },
+      { id: 'black-forest-labs/FLUX.1-dev', label: 'FLUX.1 Dev' },
+      { id: 'stabilityai/stable-diffusion-xl-base-1.0', label: 'SDXL Base 1.0' },
+      { id: 'ByteDance/Hyper-SD', label: 'Hyper-SD (ByteDance)' },
+    ],
+  },
 
   // ── Audio ────────────────────────────────────────────────
   {
@@ -136,6 +200,36 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
     models: [
       { id: 'sonic-2', label: 'Sonic 2' },
       { id: 'sonic-3', label: 'Sonic 3' },
+    ],
+  },
+  {
+    id: 'fish_audio', displayName: 'Fish Audio', category: 'audio',
+    defaultModel: 's2-pro', asyncPattern: 'sync',
+    models: [
+      { id: 's2-pro', label: 'S2 Pro (expressive)' },
+      { id: 's1', label: 'S1 (fast)' },
+    ],
+  },
+  {
+    id: 'gemini_tts', displayName: 'Gemini TTS (Google)', category: 'audio',
+    defaultModel: 'gemini-2.5-flash-tts', asyncPattern: 'sync',
+    keyProviderId: 'gemini',
+    keyDisplayName: 'Google AI Studio / Gemini',
+    models: [
+      { id: 'gemini-2.5-flash-tts', label: 'Gemini 2.5 Flash TTS' },
+      { id: 'gemini-2.5-flash-lite-tts', label: 'Gemini 2.5 Flash Lite TTS' },
+      { id: 'gemini-3.1-flash-tts', label: 'Gemini 3.1 Flash TTS' },
+    ],
+  },
+  {
+    id: 'huggingface_audio', displayName: 'Hugging Face', category: 'audio',
+    defaultModel: 'facebook/mms-tts-eng', asyncPattern: 'sync',
+    keyProviderId: 'huggingface',
+    keyDisplayName: 'Hugging Face Token',
+    models: [
+      { id: 'facebook/mms-tts-eng', label: 'MMS TTS (Facebook)' },
+      { id: 'suno/bark', label: 'Bark (Suno)' },
+      { id: 'microsoft/speecht5_tts', label: 'SpeechT5 (Microsoft)' },
     ],
   },
 
@@ -181,6 +275,36 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
     models: [
       { id: 'fal-ai/pika-ai/pikav2.2', label: 'Pika v2.2' },
       { id: 'fal-ai/minimax/video-01', label: 'MiniMax Video 01' },
+    ],
+  },
+  {
+    id: 'veo', displayName: 'Veo (Google)', category: 'video',
+    defaultModel: 'veo-3.1-generate-preview', asyncPattern: 'polling',
+    keyProviderId: 'gemini',
+    keyDisplayName: 'Google AI Studio / Gemini',
+    models: [
+      { id: 'veo-3.1-generate-preview', label: 'Veo 3.1' },
+      { id: 'veo-3.1-fast-generate-preview', label: 'Veo 3.1 Fast' },
+    ],
+  },
+  {
+    id: 'replicate_video', displayName: 'Replicate', category: 'video',
+    defaultModel: 'minimax/video-01-live', asyncPattern: 'polling',
+    keyProviderId: 'replicate',
+    models: [
+      { id: 'minimax/video-01-live', label: 'MiniMax Video 01 Live' },
+      { id: 'wan-ai/wan2.1-i2v-480p', label: 'Wan 2.1 (480p)' },
+      { id: 'luma/ray2-flash', label: 'Luma Ray 2 Flash' },
+    ],
+  },
+  {
+    id: 'huggingface_video', displayName: 'Hugging Face', category: 'video',
+    defaultModel: 'Wan-AI/Wan2.1-T2V-14B', asyncPattern: 'sync',
+    keyProviderId: 'huggingface',
+    keyDisplayName: 'Hugging Face Token',
+    models: [
+      { id: 'Wan-AI/Wan2.1-T2V-14B', label: 'Wan 2.1 T2V 14B' },
+      { id: 'ali-vilab/i2vgen-xl', label: 'I2VGen-XL' },
     ],
   },
 ]

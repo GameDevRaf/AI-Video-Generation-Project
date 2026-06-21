@@ -59,7 +59,12 @@ export interface VideoParams extends ProviderParams {
   duration?: number
   aspectRatio?: string
 }
-export interface VideoResult { videoUrl: string }
+// Most providers return a URL; Veo and HF return raw bytes (auth-gated or direct buffer)
+export interface VideoResult {
+  videoUrl?: string
+  rawBuffer?: Buffer
+  mimeType?: string
+}
 export interface VideoProvider {
   readonly providerId: string
   generate(params: VideoParams): Promise<VideoResult>

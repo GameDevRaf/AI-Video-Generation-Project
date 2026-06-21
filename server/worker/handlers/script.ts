@@ -51,7 +51,7 @@ Rules:
     ? `Existing script:\n${input.existing_script}\n\nRefinement instructions:\n${input.refinement_instructions}`
     : `Video idea: ${input.idea}\nTone: ${input.tone}\n\nGenerate 3 script variations.`
 
-  const apiKey = await getProviderKey(providerId, job.user_id)
+  const apiKey = await getProviderKey(meta?.keyProviderId ?? providerId, job.user_id)
   const provider = providerRegistry.script(providerId)
 
   const { text } = await provider.generate({

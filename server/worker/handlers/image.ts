@@ -28,7 +28,7 @@ export async function handleImageJob(job: DbJob) {
 
   await updateJobStatus(job.id, 'waiting_on_provider', {})
 
-  const apiKey = await getProviderKey(providerId, job.user_id)
+  const apiKey = await getProviderKey(meta?.keyProviderId ?? providerId, job.user_id)
   const provider = providerRegistry.image(providerId)
 
   const result = await provider.generate({
