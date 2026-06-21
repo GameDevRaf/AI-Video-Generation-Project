@@ -7,17 +7,50 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "worker": "tsx server/worker/index.ts",
+    "worker:watch": "tsx watch server/worker/index.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.105.0",
+    "@elevenlabs/elevenlabs-js": "^2.53.1",
+    "@fal-ai/client": "^1.10.1",
+    "@google/genai": "^2.9.0",
+    "@mistralai/mistralai": "^2.2.6",
     "@nuxtjs/supabase": "^2.0.9",
+    "@pinia/nuxt": "^0.11.3",
+    "@runwayml/sdk": "^4.2.0",
     "@supabase/supabase-js": "^2.108.2",
+    "@tailwindcss/vite": "^4.3.1",
+    "@vueuse/nuxt": "^14.3.0",
+    "dotenv": "^17.4.2",
+    "groq-sdk": "^1.2.1",
+    "jose": "^6.2.3",
+    "lumaai": "^1.19.1",
     "nuxt": "^4.4.8",
+    "openai": "^6.44.0",
+    "pinia": "^3.0.4",
+    "tailwindcss": "^4.3.1",
+    "together-ai": "^0.40.0",
+    "tsx": "^4.22.4",
     "vue": "^3.5.35",
     "vue-router": "^5.1.0"
   },
   "devDependencies": {
+    "@nuxt/test-utils": "^4.0.3",
+    "@playwright/test": "^1.61.0",
+    "@types/node": "^26.0.0",
+    "@vue/test-utils": "^2.4.11",
     "eslint": "^10.5.0",
-    "prettier": "^3.8.4"
+    "happy-dom": "^20.10.6",
+    "prettier": "^3.8.4",
+    "vitest": "^4.1.9"
   }
 }
