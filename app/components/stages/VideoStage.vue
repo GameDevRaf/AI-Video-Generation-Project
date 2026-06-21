@@ -113,7 +113,7 @@ const { scenes, loading: scenesLoading, fetchScenes } = useScenes(toRef(props, '
 const videoStage = useVideoStage(toRef(props, 'projectId'))
 
 const { job: promptsJob, isRunning: promptsRunning, error: promptsError, startJob: startPromptsJob } = useJobPoller()
-const { isRunning: videosRunning, error: videosError, startJob: startVideoJob } = useJobPoller()
+const { job: videoJob, isRunning: videosRunning, error: videosError, startJob: startVideoJob } = useJobPoller()
 
 const activeSceneId = ref<string | null>(null)
 const generatingSceneId = ref<string | null>(null)
@@ -129,16 +129,46 @@ watch(promptsJob, async (j) => {
   if (j?.status === 'completed') await videoStage.fetchPrompts()
 })
 
+// After a single video job finishes, reload videos and clear the loading state
+watch(videoJob, async (j) => {
+  if (j?.status === 'completed') {
+    await videoStage.fetchVideos()
+    generatingSceneId.value = null
+  } else if (j?.status === 'failed') {
+    providerError.value = j.error_message ?? 'Video generation failed.'
+    generatingSceneId.value = null
+  }
+})
+
 async function generateAllPrompts() {
   await startPromptsJob(props.projectId, 'video_prompt', {})
 }
 
 async function generateAllVideos() {
-  for (const scene of scenes.value) {
-    const prompt = videoStage.getPrompt(scene.id)
-    if (!prompt) continue
-    await generateSingleVideo(scene.id, prompt)
-  }
+  // Fire all video jobs in parallel (each takes 60–120 s; sequential would be too slow)
+  const provider = projectStore.settings?.default_video_provider ?? undefined
+  const model = projectStore.settings?.default_video_model ?? undefined
+  await Promise.all(
+    scenes.value
+      .filter(s => videoStage.getPrompt(s.id))
+      .map(s =>
+        $fetch('/api/jobs', {
+          method: 'POST',
+          body: {
+            projectId: props.projectId,
+            type: 'video',
+            input: {
+              scene_id: s.id,
+              prompt: videoStage.getPrompt(s.id),
+              ...(provider ? { provider } : {}),
+              ...(model ? { model } : {}),
+            },
+          },
+        }).catch(() => null),
+      ),
+  )
+  // Jobs are now queued in the worker; poll until the first completes so the UI updates,
+  // then let VideoSceneCard individual buttons handle the rest.
   await videoStage.fetchVideos()
 }
 
@@ -148,23 +178,15 @@ async function generateSingleVideo(sceneId: string, prompt: string) {
   const provider = projectStore.settings?.default_video_provider ?? undefined
   const model = projectStore.settings?.default_video_model ?? undefined
   try {
-    const job = await $fetch<{ id: string; error_message?: string }>('/api/jobs', {
-      method: 'POST',
-      body: {
-        projectId: props.projectId,
-        type: 'video',
-        input: {
-          scene_id: sceneId,
-          prompt,
-          ...(provider ? { provider } : {}),
-          ...(model ? { model } : {}),
-        },
-      },
+    await startVideoJob(props.projectId, 'video', {
+      scene_id: sceneId,
+      prompt,
+      ...(provider ? { provider } : {}),
+      ...(model ? { model } : {}),
     })
-    if (job.error_message) providerError.value = job.error_message
+    // generatingSceneId is cleared by the videoJob watcher once status is terminal
   } catch {
     providerError.value = 'Failed to start video job.'
-  } finally {
     generatingSceneId.value = null
   }
 }

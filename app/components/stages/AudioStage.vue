@@ -75,7 +75,7 @@
     <!-- Generate button -->
     <div class="flex items-center gap-4 flex-wrap">
       <button
-        :disabled="isRunning"
+        :disabled="isRunning || !fullScriptText"
         class="px-5 py-2 bg-white text-gray-950 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors disabled:opacity-40"
         @click="generate"
       >
@@ -112,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{ projectId: string; scriptText: string }>()
+const props = defineProps<{ projectId: string }>()
 defineEmits<{ done: [] }>()
 
 const TAB_PROVIDERS = ['elevenlabs', 'openai_tts'] as const
@@ -128,20 +128,26 @@ const { settings, audioUrl, currentVoices } = audioStage
 const { scenes, fetchScenes } = useScenes(toRef(props, 'projectId'))
 const { job, isRunning, error: jobError, startJob } = useJobPoller()
 
-// Scene images: in a full implementation these come from scene_assets.
-// For now we pass an empty map — images will show when Phase 11 provider is wired.
+// Derive the voiceover text from each scene's script_text (spoken words only).
+// Using scenes as the source of truth is safer than the raw full script, because
+// the scene-split step extracts just the spoken words per scene.
+const fullScriptText = computed(() =>
+  [...scenes.value]
+    .sort((a, b) => a.order_index - b.order_index)
+    .map(s => s.script_text)
+    .join('\n\n'),
+)
+
 const sceneImagesMap = computed(() => new Map<string, string>())
 
 onMounted(async () => {
   await Promise.all([fetchScenes(), audioStage.fetchExistingAudio()])
-  // Sync tab selection with the project's chosen audio provider (if it's a tabbed option)
   const savedProvider = projectStore.settings?.default_audio_provider
   if (savedProvider && (TAB_PROVIDERS as readonly string[]).includes(savedProvider)) {
     audioStage.setProvider(savedProvider as 'elevenlabs' | 'openai_tts')
   }
 })
 
-// Show audio URL when job completes
 watch(job, async (j) => {
   if (j?.status === 'completed') {
     await audioStage.fetchExistingAudio()
@@ -149,10 +155,9 @@ watch(job, async (j) => {
 })
 
 async function generate() {
-  // ModelSelector project-level choice takes priority; fall back to the tab selection
   const provider = projectStore.settings?.default_audio_provider ?? settings.value.provider
   await startJob(props.projectId, 'audio', {
-    script_text: props.scriptText,
+    script_text: fullScriptText.value,
     voice_id: settings.value.voiceId,
     provider,
     speed: settings.value.speed,

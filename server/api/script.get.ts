@@ -1,8 +1,7 @@
 import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
 
-// Returns generated video URLs keyed by scene_id.
-// Reads from job_outputs directly (label: "scene_video_{scene_id}").
-// If the user regenerated a scene's video, the newest one wins.
+// Returns the script text from the most recent scene_split job for a project.
+// Used to restore workspace.activeScriptText when reopening a project.
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
   if (!user) throw createError({ statusCode: 401, message: 'Unauthorized' })
@@ -21,24 +20,17 @@ export default defineEventHandler(async (event) => {
 
   if (!project) throw createError({ statusCode: 403, message: 'Project not found' })
 
-  const { data } = await supabase
-    .from('job_outputs')
-    .select('label, storage_url')
+  // The scene_split job input always contains the full script text the user locked in.
+  // Pick the most recent one regardless of status so we always get the latest attempt.
+  const { data: job } = await supabase
+    .from('jobs')
+    .select('input')
     .eq('project_id', projectId)
-    .eq('type', 'video')
-    .like('label', 'scene_video_%')
+    .eq('type', 'scene_split')
     .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
-  // Deduplicate: newest video per scene_id
-  const seen = new Set<string>()
-  const result: { sceneId: string; url: string }[] = []
-
-  for (const row of data ?? []) {
-    const sceneId = row.label?.replace('scene_video_', '') ?? ''
-    if (!sceneId || seen.has(sceneId) || !row.storage_url) continue
-    seen.add(sceneId)
-    result.push({ sceneId, url: row.storage_url })
-  }
-
-  return result
+  const text = (job?.input as { script_text?: string } | null)?.script_text ?? null
+  return { text }
 })

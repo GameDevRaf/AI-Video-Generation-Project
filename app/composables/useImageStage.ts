@@ -25,6 +25,13 @@ export function useImageStage(projectId: MaybeRef<string>) {
     }
   }
 
+  async function fetchImages() {
+    const data = await $fetch<{ sceneId: string; url: string }[]>('/api/images', {
+      query: { projectId: toValue(projectId) },
+    })
+    images.value = new Map(data.map(i => [i.sceneId, i.url]))
+  }
+
   function setPromptsFromJob(outputs: { sceneId: string; outputId: string; prompt: string }[]) {
     prompts.value = new Map(outputs.map(p => [p.sceneId, p]))
   }
@@ -52,5 +59,5 @@ export function useImageStage(projectId: MaybeRef<string>) {
     return images.value.get(scene.id) ?? null
   }
 
-  return { prompts, images, loading, fetchPrompts, setPromptsFromJob, savePrompt, getPrompt, hasPrompt, getImage }
+  return { prompts, images, loading, fetchPrompts, fetchImages, setPromptsFromJob, savePrompt, getPrompt, hasPrompt, getImage }
 }

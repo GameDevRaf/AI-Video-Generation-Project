@@ -44,9 +44,11 @@
         :has-prompt="imageStage.hasPrompt(scene)"
         :image-url="imageStage.getImage(scene)"
         :generating="generatingSceneId === scene.id"
+        :generating-prompt="promptsRunning || singlePromptRunning && regeneratingPromptSceneId === scene.id"
         :provider-error="imageProviderError"
         @save-prompt="imageStage.savePrompt"
         @generate-image="generateImage"
+        @regenerate-prompt="generateSinglePrompt"
       />
     </div>
 
@@ -75,8 +77,11 @@ const { scenes, loading: scenesLoading, fetchScenes } = useScenes(toRef(props, '
 const imageStage = useImageStage(toRef(props, 'projectId'))
 
 const { job: promptsJob, isRunning: promptsRunning, startJob: startPromptsJob } = useJobPoller()
+const { job: singlePromptJob, isRunning: singlePromptRunning, startJob: startSinglePromptJob } = useJobPoller()
+const { job: imageJob, isRunning: imageJobRunning, startJob: startImageJob } = useJobPoller()
 
 const generatingSceneId = ref<string | null>(null)
+const regeneratingPromptSceneId = ref<string | null>(null)
 const imageProviderError = ref<string | undefined>(undefined)
 
 const promptEditMode = computed(() => props.promptEditMode ?? 'after_generation')
@@ -84,18 +89,44 @@ const hasAnyPrompt = computed(() => imageStage.prompts.value.size > 0)
 
 onMounted(async () => {
   await fetchScenes()
-  await imageStage.fetchPrompts()
+  await Promise.all([imageStage.fetchPrompts(), imageStage.fetchImages()])
 })
 
-// After prompt job finishes, reload prompts from API
+// After bulk prompt job finishes, reload prompts
 watch(promptsJob, async (j) => {
   if (j?.status === 'completed') {
     await imageStage.fetchPrompts()
   }
 })
 
+// After single-scene prompt job finishes, reload prompts and clear loading state
+watch(singlePromptJob, async (j) => {
+  if (j?.status === 'completed') {
+    await imageStage.fetchPrompts()
+    regeneratingPromptSceneId.value = null
+  } else if (j?.status === 'failed') {
+    regeneratingPromptSceneId.value = null
+  }
+})
+
+// After a single image job finishes, reload images and clear the loading state
+watch(imageJob, async (j) => {
+  if (j?.status === 'completed') {
+    await imageStage.fetchImages()
+    generatingSceneId.value = null
+  } else if (j?.status === 'failed') {
+    imageProviderError.value = j.error_message ?? 'Image generation failed.'
+    generatingSceneId.value = null
+  }
+})
+
 async function generateAllPrompts() {
   await startPromptsJob(props.projectId, 'image_prompt', {})
+}
+
+async function generateSinglePrompt(sceneId: string) {
+  regeneratingPromptSceneId.value = sceneId
+  await startSinglePromptJob(props.projectId, 'image_prompt', { scene_id: sceneId })
 }
 
 async function generateImage(sceneId: string, prompt: string) {
@@ -104,25 +135,15 @@ async function generateImage(sceneId: string, prompt: string) {
   const provider = projectStore.settings?.default_image_provider ?? undefined
   const model = projectStore.settings?.default_image_model ?? undefined
   try {
-    const job = await $fetch<{ id: string; status: string; error_message?: string }>('/api/jobs', {
-      method: 'POST',
-      body: {
-        projectId: props.projectId,
-        type: 'image',
-        input: {
-          scene_id: sceneId,
-          prompt,
-          ...(provider ? { provider } : {}),
-          ...(model ? { model } : {}),
-        },
-      },
+    await startImageJob(props.projectId, 'image', {
+      scene_id: sceneId,
+      prompt,
+      ...(provider ? { provider } : {}),
+      ...(model ? { model } : {}),
     })
-    if (job.status === 'failed' || job.error_message) {
-      imageProviderError.value = job.error_message ?? 'Image provider not configured.'
-    }
+    // generatingSceneId is cleared by the imageJob watcher once status is terminal
   } catch {
     imageProviderError.value = 'Failed to start image job.'
-  } finally {
     generatingSceneId.value = null
   }
 }

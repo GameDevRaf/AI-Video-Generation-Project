@@ -23,13 +23,22 @@ function extractJsonArray(text: string): string {
 }
 
 export async function handleImagePromptJob(job: DbJob) {
-  const { data: scenes, error } = await adminSupabase
+  const input = job.input as { scene_id?: string }
+
+  const { data: allScenes, error } = await adminSupabase
     .from('scenes')
     .select('id, title, script_text')
     .eq('project_id', job.project_id)
     .order('order_index')
 
-  if (error || !scenes?.length) throw new Error('No scenes found for project')
+  if (error || !allScenes?.length) throw new Error('No scenes found for project')
+
+  // If a specific scene_id was provided, only regenerate that scene's prompt
+  const scenes = input.scene_id
+    ? allScenes.filter(s => s.id === input.scene_id)
+    : allScenes
+
+  if (!scenes.length) throw new Error('Scene not found')
 
   const providerId = await resolveProvider(job)
   const meta = getCatalogEntry(providerId)

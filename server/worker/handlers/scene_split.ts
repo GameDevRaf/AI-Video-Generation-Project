@@ -35,11 +35,18 @@ export async function handleSceneSplitJob(job: DbJob) {
     job,
     apiKey,
     model,
-    systemPrompt: `You are a video production assistant. Split the given script into logical scenes for a video.
+    systemPrompt: `You are a video production assistant. Split the given voiceover script into logical scenes for a video.
 For each scene, estimate its spoken duration in seconds (assume ~130 words per minute).
+
+Rules:
+- "script_text" must contain ONLY the exact spoken words for that scene — copy them verbatim from the input.
+- Do NOT add scene numbers, timestamps, visual descriptions, stage directions, or any notes to script_text.
+- "title" should be a short descriptive label for the scene (2-5 words).
+- "duration" is the estimated spoken duration in seconds based on word count.
+
 Respond with a JSON array only — no markdown, no explanation.
 Schema: [{ "title": string, "script_text": string, "duration": number }]`,
-    messages: [{ role: 'user', content: `Split this script into scenes:\n\n${input.script_text}` }],
+    messages: [{ role: 'user', content: `Split this voiceover script into scenes:\n\n${input.script_text}` }],
     maxTokens: 4096,
   })
 

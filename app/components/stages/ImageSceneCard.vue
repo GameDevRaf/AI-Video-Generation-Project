@@ -46,7 +46,7 @@
       />
     </div>
 
-    <!-- Generate image button -->
+    <!-- Generate image + regenerate prompt (same row) -->
     <div class="flex items-center gap-2">
       <button
         :disabled="!localPrompt.trim() || generating"
@@ -58,6 +58,20 @@
           Generating…
         </span>
         <span v-else>{{ imageUrl ? 'Regenerate image' : 'Generate image' }}</span>
+      </button>
+
+      <!-- Regenerate prompt icon — same row, right of the image button -->
+      <button
+        :disabled="generatingPrompt"
+        class="p-1.5 rounded-lg border border-white/10 text-gray-500 hover:text-gray-200 hover:border-white/20 transition-colors disabled:opacity-40"
+        title="Regenerate prompt for this scene"
+        @click="$emit('regenerate-prompt', scene.id)"
+      >
+        <span v-if="generatingPrompt" class="inline-block w-3 h-3 border border-gray-500 border-t-gray-200 rounded-full animate-spin" />
+        <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+          <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+        </svg>
       </button>
 
       <span v-if="providerError" class="text-xs text-amber-400/80">{{ providerError }}</span>
@@ -74,12 +88,14 @@ const props = defineProps<{
   hasPrompt: boolean
   imageUrl: string | null
   generating: boolean
+  generatingPrompt: boolean
   providerError?: string
 }>()
 
 const emit = defineEmits<{
   'save-prompt': [sceneId: string, prompt: string]
   'generate-image': [sceneId: string, prompt: string]
+  'regenerate-prompt': [sceneId: string]
 }>()
 
 const localPrompt = ref(props.prompt)

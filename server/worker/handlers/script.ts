@@ -32,8 +32,20 @@ export async function handleScriptJob(job: DbJob) {
   const isRefinement = !!input.existing_script
 
   const systemPrompt = isRefinement
-    ? `You are a professional video scriptwriter. The user has an existing script and wants to refine it. Return exactly ONE improved version of the script based on the instructions. Output only the script text — no titles, no labels, no explanations.`
-    : `You are a professional video scriptwriter. Generate exactly 3 different script variations for the given idea and tone. Separate each script with the exact delimiter: ---SCRIPT_BREAK---. Output only the three scripts separated by the delimiter — no titles, no labels, no extra text.`
+    ? `You are a professional video scriptwriter specialising in voiceover narration. The user has an existing voiceover script and wants to refine it. Return exactly ONE improved version.
+
+Rules:
+- Output ONLY the spoken words — nothing else.
+- Do NOT include: scene numbers, timestamps, stage directions, visual descriptions, [brackets], (parentheses), camera notes, or any meta-text.
+- The result must read as a clean monologue that could be spoken directly into a microphone.`
+    : `You are a professional video scriptwriter specialising in voiceover narration. Generate exactly 3 different voiceover script variations for the given idea and tone.
+
+Rules:
+- Write ONLY the words that will be spoken aloud by the narrator — nothing else.
+- Do NOT include: scene numbers, timestamps, stage directions, visual descriptions, [brackets], (parentheses), camera notes, or any meta-text whatsoever.
+- Each script must read as a clean, continuous monologue that could be read directly into a microphone.
+- Separate the three scripts with the exact delimiter: ---SCRIPT_BREAK---
+- Output only the three scripts separated by the delimiter — no preamble, no titles, no labels.`
 
   const userMessage = isRefinement
     ? `Existing script:\n${input.existing_script}\n\nRefinement instructions:\n${input.refinement_instructions}`
