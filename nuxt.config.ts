@@ -1,9 +1,15 @@
 import tailwindcss from '@tailwindcss/vite'
+import { resolve } from 'node:path'
 
-// https://nuxt.com/docs/api/configuration/nuxt-config
+const supabaseServerAlias = resolve(process.cwd(), 'supabase-server.ts')
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
+
+  alias: {
+    '#supabase/server': supabaseServerAlias,
+  },
 
   modules: [
     '@nuxtjs/supabase',
@@ -14,17 +20,24 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   vite: {
+    resolve: {
+      alias: {
+        '#supabase/server': supabaseServerAlias,
+      },
+    },
     plugins: [tailwindcss()],
     optimizeDeps: {
-      include: [
-        '@vue/devtools-core',
-        '@vue/devtools-kit',
-      ]
-    }
+      include: ['@vue/devtools-core', '@vue/devtools-kit'],
+    },
+  },
+
+  nitro: {
+    alias: {
+      '#supabase/server': supabaseServerAlias,
+    },
   },
 
   runtimeConfig: {
-    // Server-only — used by the worker to bypass RLS
     supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
   },
 
@@ -32,7 +45,6 @@ export default defineNuxtConfig({
     redirectOptions: {
       login: '/auth/login',
       callback: '/confirm',
-      // Explicit paths prevent @nuxtjs/supabase from redirecting auth pages on session changes
       exclude: ['/', '/auth/login', '/auth/signup', '/confirm'],
     },
     types: '~/types/database.types',

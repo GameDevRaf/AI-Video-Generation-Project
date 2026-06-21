@@ -1,4 +1,4 @@
-import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
+﻿import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
 
 // Returns generated video URLs keyed by scene_id
 export default defineEventHandler(async (event) => {
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
 
   if (!project) throw createError({ statusCode: 403, message: 'Project not found' })
 
-  // Join scene_assets → job_outputs for generated_video assets
+  // Join scene_assets â†’ job_outputs for generated_video assets
   const { data } = await supabase
     .from('scene_assets')
     .select('scene_id, job_outputs(storage_url)')
@@ -39,3 +39,4 @@ export default defineEventHandler(async (event) => {
     url: (row.job_outputs as unknown as { storage_url: string } | null)?.storage_url ?? null,
   })).filter(r => r.url)
 })
+

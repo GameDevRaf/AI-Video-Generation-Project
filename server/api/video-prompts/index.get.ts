@@ -1,4 +1,4 @@
-import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
+﻿import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -42,3 +42,4 @@ export default defineEventHandler(async (event) => {
     prompt: (o.metadata as { content?: string } | null)?.content ?? '',
   }))
 })
+

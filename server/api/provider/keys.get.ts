@@ -1,6 +1,6 @@
-import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
+﻿import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
 
-// Returns key metadata only — never returns encrypted_secret to the client
+// Returns key metadata only â€” never returns encrypted_secret to the client
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
   if (!user) throw createError({ statusCode: 401, message: 'Unauthorized' })
@@ -17,3 +17,4 @@ export default defineEventHandler(async (event) => {
 
   return data
 })
+

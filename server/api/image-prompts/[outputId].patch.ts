@@ -1,4 +1,4 @@
-import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
+﻿import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
 
   const supabase = await serverSupabaseClient(event)
 
-  // Ownership check via job → user_id
+  // Ownership check via job â†’ user_id
   const { data: output } = await supabase
     .from('job_outputs')
     .select('id, jobs!inner(user_id)')

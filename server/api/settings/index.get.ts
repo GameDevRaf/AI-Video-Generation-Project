@@ -1,4 +1,4 @@
-import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
+﻿import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
     .single()
 
   if (error && error.code === 'PGRST116') {
-    // Row doesn't exist yet — auto-create and return defaults
+    // Row doesn't exist yet â€” auto-create and return defaults
     const { data: created } = await supabase
       .from('user_settings')
       .insert({ user_id: user.id })
@@ -26,3 +26,4 @@ export default defineEventHandler(async (event) => {
 
   return data
 })
+

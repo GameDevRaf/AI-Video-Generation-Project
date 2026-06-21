@@ -1,4 +1,4 @@
-import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
+﻿import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
 import { encrypt } from '../../utils/crypto'
 
 export default defineEventHandler(async (event) => {
@@ -28,3 +28,4 @@ export default defineEventHandler(async (event) => {
 
   return data
 })
+

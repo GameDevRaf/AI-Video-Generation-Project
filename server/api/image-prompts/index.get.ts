@@ -1,4 +1,4 @@
-import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
+﻿import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
 
 // Returns the latest image prompts for every scene in a project.
 // Looks for the most recent completed image_prompt job and maps its outputs to scene ids.
@@ -47,3 +47,4 @@ export default defineEventHandler(async (event) => {
     prompt: (o.metadata as { content?: string } | null)?.content ?? '',
   }))
 })
+

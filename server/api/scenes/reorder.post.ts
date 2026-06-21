@@ -1,4 +1,4 @@
-import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
+﻿import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
 
 // Accepts an ordered array of scene ids and updates each order_index + recalculated timestamps
 export default defineEventHandler(async (event) => {
@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
 
   if (!project) throw createError({ statusCode: 403, message: 'Project not found' })
 
-  // Update each scene — Supabase doesn't support bulk update natively so we run them in parallel
+  // Update each scene â€” Supabase doesn't support bulk update natively so we run them in parallel
   await Promise.all(
     body.scenes.map(s =>
       supabase
@@ -45,3 +45,4 @@ export default defineEventHandler(async (event) => {
 
   return { success: true }
 })
+

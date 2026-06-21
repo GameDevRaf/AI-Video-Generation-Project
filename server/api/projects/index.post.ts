@@ -1,4 +1,4 @@
-import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
+﻿import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -15,10 +15,18 @@ export default defineEventHandler(async (event) => {
     .select()
     .single()
 
-  if (projectError) throw createError({ statusCode: 500, message: projectError.message })
+  if (projectError) {
+    console.error('POST /api/projects database error:', projectError)
+    throw createError({ statusCode: 500, message: projectError.message })
+  }
 
   // Create default settings row
-  await supabase.from('project_settings').insert({ project_id: project.id })
+  const { error: settingsError } = await supabase.from('project_settings').insert({ project_id: project.id })
+  if (settingsError) {
+    console.error('POST /api/projects settings insert error:', settingsError)
+    throw createError({ statusCode: 500, message: settingsError.message })
+  }
 
   return project
 })
+
