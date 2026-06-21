@@ -31,7 +31,7 @@
       <StagesScriptStage :project-id="projectId" @done="onScriptDone" />
 
       <!-- Scene split stage — appears after script is locked -->
-      <div v-if="workspace.activeScriptText" class="border-t border-white/5">
+      <div v-if="workspace.activeScriptText" ref="sceneSplitRef" class="border-t border-white/5">
         <StagesSceneSplitStage
           :project-id="projectId"
           :script-text="workspace.activeScriptText"
@@ -40,7 +40,7 @@
       </div>
 
       <!-- Image stage — appears after scenes are confirmed -->
-      <div v-if="showImageStage" class="border-t border-white/5">
+      <div v-if="showImageStage" ref="imageStageRef" class="border-t border-white/5">
         <StagesImageStage
           :project-id="projectId"
           :prompt-edit-mode="projectSettings?.prompt_edit_mode"
@@ -49,7 +49,7 @@
       </div>
 
       <!-- Audio stage -->
-      <div v-if="showAudioStage" class="border-t border-white/5">
+      <div v-if="showAudioStage" ref="audioStageRef" class="border-t border-white/5">
         <StagesAudioStage
           :project-id="projectId"
           :script-text="workspace.activeScriptText ?? ''"
@@ -58,7 +58,7 @@
       </div>
 
       <!-- Video stage -->
-      <div v-if="showVideoStage" class="border-t border-white/5">
+      <div v-if="showVideoStage" ref="videoStageRef" class="border-t border-white/5">
         <StagesVideoStage
           :project-id="projectId"
           @done="onVideoDone"
@@ -66,7 +66,7 @@
       </div>
 
       <!-- Export stage -->
-      <div v-if="showExportStage" class="border-t border-white/5">
+      <div v-if="showExportStage" ref="exportStageRef" class="border-t border-white/5">
         <StagesExportStage :project-id="projectId" />
       </div>
     </template>
@@ -112,6 +112,24 @@ const projectSettings = computed(() => projectStore.settings)
 const loading = computed(() => projectStore.loading)
 const error = computed(() => projectStore.error)
 
+// Section refs for smooth scroll-into-view after stage transitions
+const sceneSplitRef = ref<HTMLElement | null>(null)
+const imageStageRef = ref<HTMLElement | null>(null)
+const audioStageRef = ref<HTMLElement | null>(null)
+const videoStageRef = ref<HTMLElement | null>(null)
+const exportStageRef = ref<HTMLElement | null>(null)
+
+function scrollToStage(el: Ref<HTMLElement | null>) {
+  nextTick(() => {
+    el.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+}
+
+// Scroll to SceneSplitStage when the active script is set (after "Use this script")
+watch(() => workspace.activeScriptText, (text) => {
+  if (text) scrollToStage(sceneSplitRef)
+})
+
 // Provider selector state
 const savedProviderIds = ref<string[]>([])
 
@@ -131,10 +149,8 @@ async function onProviderChanged(providerId: string, modelId: string) {
   const stage = projectStore.currentStage
   const field = STAGE_PROVIDER_FIELD[stage]
   if (!field) return
-  await $fetch('/api/projects/' + projectId.value + '/settings', {
-    method: 'PATCH',
-    body: { [field]: providerId, [`default_${stage}_model`]: modelId },
-  }).catch(() => {})
+  // Update local store immediately so stage components see the new provider right away
+  await projectStore.updateSettings({ [field]: providerId, [`default_${stage}_model`]: modelId } as Parameters<typeof projectStore.updateSettings>[0])
 }
 
 onMounted(async () => {
@@ -164,20 +180,24 @@ function onScriptDone() {
 function onSceneDone() {
   showImageStage.value = true
   projectStore.setStage('image')
+  scrollToStage(imageStageRef)
 }
 
 function onImageDone() {
   showAudioStage.value = true
   projectStore.setStage('audio')
+  scrollToStage(audioStageRef)
 }
 
 function onAudioDone() {
   showVideoStage.value = true
   projectStore.setStage('video')
+  scrollToStage(videoStageRef)
 }
 
 function onVideoDone() {
   showExportStage.value = true
   projectStore.setStage('export')
+  scrollToStage(exportStageRef)
 }
 </script>

@@ -21,7 +21,13 @@ vi.mock('../../../server/worker/lib/jobs', () => ({
   storeFileOutput: vi.fn(),
 }))
 
-vi.mock('../../../server/worker/lib/supabase', () => ({ adminSupabase: {} }))
+// adminSupabase mock — supports user_settings lookup for resolveScriptProvider
+const mockUserSettingsSingle = vi.fn().mockResolvedValue({ data: { default_script_provider: 'anthropic' } })
+const mockUserSettingsEq = vi.fn(() => ({ single: mockUserSettingsSingle }))
+const mockUserSettingsSelect = vi.fn(() => ({ eq: mockUserSettingsEq }))
+vi.mock('../../../server/worker/lib/supabase', () => ({
+  adminSupabase: { from: vi.fn(() => ({ select: mockUserSettingsSelect })) },
+}))
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

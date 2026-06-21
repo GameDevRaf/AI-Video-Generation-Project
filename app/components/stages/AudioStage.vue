@@ -19,7 +19,7 @@
           :class="settings.provider === p.id
             ? 'bg-white text-gray-950'
             : 'text-gray-400 hover:text-white'"
-          @click="audioStage.setProvider(p.id as 'elevenlabs' | 'openai')"
+          @click="audioStage.setProvider(p.id as 'elevenlabs' | 'openai_tts')"
         >
           {{ p.label }}
         </button>
@@ -115,11 +115,13 @@
 const props = defineProps<{ projectId: string; scriptText: string }>()
 defineEmits<{ done: [] }>()
 
+const TAB_PROVIDERS = ['elevenlabs', 'openai_tts'] as const
 const providers = [
   { id: 'elevenlabs', label: 'ElevenLabs' },
-  { id: 'openai', label: 'OpenAI TTS' },
+  { id: 'openai_tts', label: 'OpenAI TTS' },
 ]
 
+const projectStore = useProjectStore()
 const audioStage = useAudioStage(toRef(props, 'projectId'))
 const { settings, audioUrl, currentVoices } = audioStage
 
@@ -132,6 +134,11 @@ const sceneImagesMap = computed(() => new Map<string, string>())
 
 onMounted(async () => {
   await Promise.all([fetchScenes(), audioStage.fetchExistingAudio()])
+  // Sync tab selection with the project's chosen audio provider (if it's a tabbed option)
+  const savedProvider = projectStore.settings?.default_audio_provider
+  if (savedProvider && (TAB_PROVIDERS as readonly string[]).includes(savedProvider)) {
+    audioStage.setProvider(savedProvider as 'elevenlabs' | 'openai_tts')
+  }
 })
 
 // Show audio URL when job completes
@@ -142,10 +149,12 @@ watch(job, async (j) => {
 })
 
 async function generate() {
+  // ModelSelector project-level choice takes priority; fall back to the tab selection
+  const provider = projectStore.settings?.default_audio_provider ?? settings.value.provider
   await startJob(props.projectId, 'audio', {
     script_text: props.scriptText,
     voice_id: settings.value.voiceId,
-    provider: settings.value.provider,
+    provider,
     speed: settings.value.speed,
     stability: settings.value.stability,
     similarity_boost: settings.value.similarityBoost,

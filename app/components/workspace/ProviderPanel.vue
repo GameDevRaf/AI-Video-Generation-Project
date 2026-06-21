@@ -8,7 +8,7 @@
       <div class="w-80 h-full bg-gray-900 border-l border-white/10 flex flex-col shadow-2xl overflow-y-auto">
         <!-- Header -->
         <div class="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
-          <h2 class="text-sm font-semibold">API Keys</h2>
+          <h2 class="text-sm font-semibold text-white">API Keys</h2>
           <button class="text-gray-500 hover:text-white transition-colors" @click="$emit('close')">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6 6 18M6 6l12 12"/>

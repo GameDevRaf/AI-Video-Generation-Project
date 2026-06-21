@@ -69,6 +69,8 @@ const props = defineProps<{
 }>()
 defineEmits<{ done: [] }>()
 
+const projectStore = useProjectStore()
+
 const { scenes, loading: scenesLoading, fetchScenes } = useScenes(toRef(props, 'projectId'))
 const imageStage = useImageStage(toRef(props, 'projectId'))
 
@@ -99,16 +101,22 @@ async function generateAllPrompts() {
 async function generateImage(sceneId: string, prompt: string) {
   generatingSceneId.value = sceneId
   imageProviderError.value = undefined
+  const provider = projectStore.settings?.default_image_provider ?? undefined
+  const model = projectStore.settings?.default_image_model ?? undefined
   try {
     const job = await $fetch<{ id: string; status: string; error_message?: string }>('/api/jobs', {
       method: 'POST',
       body: {
         projectId: props.projectId,
         type: 'image',
-        input: { scene_id: sceneId, prompt },
+        input: {
+          scene_id: sceneId,
+          prompt,
+          ...(provider ? { provider } : {}),
+          ...(model ? { model } : {}),
+        },
       },
     })
-    // Image provider is a placeholder — show its error message
     if (job.status === 'failed' || job.error_message) {
       imageProviderError.value = job.error_message ?? 'Image provider not configured.'
     }

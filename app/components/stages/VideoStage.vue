@@ -107,6 +107,8 @@
 const props = defineProps<{ projectId: string }>()
 defineEmits<{ done: [] }>()
 
+const projectStore = useProjectStore()
+
 const { scenes, loading: scenesLoading, fetchScenes } = useScenes(toRef(props, 'projectId'))
 const videoStage = useVideoStage(toRef(props, 'projectId'))
 
@@ -143,13 +145,20 @@ async function generateAllVideos() {
 async function generateSingleVideo(sceneId: string, prompt: string) {
   generatingSceneId.value = sceneId
   providerError.value = undefined
+  const provider = projectStore.settings?.default_video_provider ?? undefined
+  const model = projectStore.settings?.default_video_model ?? undefined
   try {
     const job = await $fetch<{ id: string; error_message?: string }>('/api/jobs', {
       method: 'POST',
       body: {
         projectId: props.projectId,
         type: 'video',
-        input: { scene_id: sceneId, prompt },
+        input: {
+          scene_id: sceneId,
+          prompt,
+          ...(provider ? { provider } : {}),
+          ...(model ? { model } : {}),
+        },
       },
     })
     if (job.error_message) providerError.value = job.error_message

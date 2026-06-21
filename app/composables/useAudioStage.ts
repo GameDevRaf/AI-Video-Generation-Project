@@ -9,14 +9,14 @@ export interface VoiceOption {
 }
 
 export interface AudioSettings {
-  provider: 'elevenlabs' | 'openai'
+  provider: 'elevenlabs' | 'openai_tts'
   voiceId: string
   speed: number
   stability: number     // ElevenLabs only
   similarityBoost: number  // ElevenLabs only
 }
 
-export const VOICES: Record<AudioSettings['provider'], VoiceOption[]> = {
+export const VOICES: Record<'elevenlabs' | 'openai_tts', VoiceOption[]> = {
   elevenlabs: [
     { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', gender: 'female' },
     { id: 'ErXwobaYiN019PkySvjV', name: 'Antoni', gender: 'male' },
@@ -26,7 +26,7 @@ export const VOICES: Record<AudioSettings['provider'], VoiceOption[]> = {
     { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', gender: 'male' },
     { id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam', gender: 'neutral' },
   ],
-  openai: [
+  openai_tts: [
     { id: 'alloy', name: 'Alloy', gender: 'neutral' },
     { id: 'echo', name: 'Echo', gender: 'male' },
     { id: 'fable', name: 'Fable', gender: 'neutral' },
@@ -66,7 +66,7 @@ export function useAudioStage(projectId: MaybeRef<string>) {
 
   const currentVoices = computed(() => VOICES[settings.value.provider])
 
-  function setProvider(p: AudioSettings['provider']) {
+  function setProvider(p: 'elevenlabs' | 'openai_tts') {
     settings.value.provider = p
     settings.value.voiceId = VOICES[p][0].id
   }

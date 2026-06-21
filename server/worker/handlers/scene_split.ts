@@ -1,9 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { adminSupabase } from '../lib/supabase'
+import { getProviderKey } from '../lib/getProviderKey'
+import { providerRegistry } from '../providers/registry'
+import { getCatalogEntry } from '../providers/catalog'
 import { updateJobStatus } from '../lib/jobs'
 import type { DbJob } from '../../../app/types/database.types'
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 interface SceneData {
   title: string
@@ -11,27 +11,43 @@ interface SceneData {
   duration: number  // seconds
 }
 
+async function resolveSceneSplitProvider(job: DbJob): Promise<string> {
+  if (job.provider) return job.provider
+  const { data } = await adminSupabase
+    .from('user_settings')
+    .select('default_script_provider')
+    .eq('user_id', job.user_id)
+    .single()
+  return data?.default_script_provider ?? 'anthropic'
+}
+
 export async function handleSceneSplitJob(job: DbJob) {
   const input = job.input as { script_text: string }
 
-  const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 4096,
-    system: `You are a video production assistant. Split the given script into logical scenes for a video.
+  const providerId = await resolveSceneSplitProvider(job)
+  const meta = getCatalogEntry(providerId)
+  const model = job.model ?? meta?.defaultModel ?? 'claude-sonnet-4-6'
+
+  const apiKey = await getProviderKey(providerId, job.user_id)
+  const provider = providerRegistry.script(providerId)
+
+  const { text: raw } = await provider.generate({
+    job,
+    apiKey,
+    model,
+    systemPrompt: `You are a video production assistant. Split the given script into logical scenes for a video.
 For each scene, estimate its spoken duration in seconds (assume ~130 words per minute).
 Respond with a JSON array only — no markdown, no explanation.
 Schema: [{ "title": string, "script_text": string, "duration": number }]`,
     messages: [{ role: 'user', content: `Split this script into scenes:\n\n${input.script_text}` }],
+    maxTokens: 4096,
   })
 
-  const raw = message.content
-    .filter(b => b.type === 'text')
-    .map(b => (b as { type: 'text'; text: string }).text)
-    .join('')
-    .trim()
-
-  // Strip markdown code fences if present
-  const json = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+  // Extract the JSON array from the response, tolerating preamble or code fences
+  const trimmed = raw.trim().replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+  const start = trimmed.indexOf('[')
+  const end = trimmed.lastIndexOf(']')
+  const json = start !== -1 && end > start ? trimmed.slice(start, end + 1) : trimmed
   const scenes: SceneData[] = JSON.parse(json)
 
   // Delete any existing scenes for this project (re-split replaces all)

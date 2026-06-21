@@ -72,6 +72,7 @@
     <!-- Script editor — shown after selection -->
     <StagesScriptEditor
       v-if="selectedScript"
+      :key="selectedScript.id"
       :project-id="projectId"
       :initial-text="scriptText(selectedScript)"
       :output-id="selectedScript.id"
@@ -84,6 +85,7 @@
 import type { DbJobOutput } from '~/types/database.types'
 
 const props = defineProps<{ projectId: string }>()
+const projectStore = useProjectStore()
 
 const tones = ['Educational', 'Narrative', 'Promotional', 'Conversational', 'Documentary', 'Inspirational']
 
@@ -108,7 +110,14 @@ function scriptText(output: DbJobOutput): string {
 async function generate() {
   selectedId.value = null
   selectedScript.value = null
-  await startJob(props.projectId, 'script', { idea: idea.value.trim(), tone: tone.value })
+  const provider = projectStore.settings?.default_script_provider ?? undefined
+  const model = (projectStore.settings as Record<string, unknown> | null)?.default_script_model as string | undefined
+  await startJob(props.projectId, 'script', {
+    idea: idea.value.trim(),
+    tone: tone.value,
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+  })
 }
 
 function select(script: DbJobOutput) {
