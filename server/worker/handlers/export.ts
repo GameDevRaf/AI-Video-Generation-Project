@@ -6,6 +6,7 @@ import { updateJobStatus } from '../lib/jobs'
 import {
   downloadToFile,
   extensionFromUrl,
+  getFileDurationSeconds,
   runFfmpeg,
 } from '../../utils/ffmpeg'
 import type { DbJob } from '../../../app/types/database.types'
@@ -45,29 +46,86 @@ async function getLatestSceneVideos(projectId: string, sceneIds: string[]) {
   return videoMap
 }
 
-async function getLatestAudioUrl(projectId: string) {
-  const { data: job } = await adminSupabase
-    .from('jobs')
-    .select('id')
+// Returns latest per-scene audio URLs (scene_audio_{sceneId}).
+async function getSceneAudioUrls(projectId: string, sceneIds: string[]): Promise<Map<string, string>> {
+  const { data } = await adminSupabase
+    .from('job_outputs')
+    .select('label, storage_url')
     .eq('project_id', projectId)
     .eq('type', 'audio')
-    .eq('status', 'completed')
+    .like('label', 'scene_audio_%')
+    .not('storage_url', 'is', null)
+    .order('created_at', { ascending: false })
+
+  const wanted = new Set(sceneIds)
+  const audioMap = new Map<string, string>()
+  for (const row of (data ?? []) as OutputRow[]) {
+    const sceneId = row.label?.replace('scene_audio_', '') ?? ''
+    if (!sceneId || !wanted.has(sceneId) || audioMap.has(sceneId) || !row.storage_url) continue
+    audioMap.set(sceneId, row.storage_url)
+  }
+  return audioMap
+}
+
+// Returns the latest single voice_track URL (upload or combined output).
+async function getVoiceTrackUrl(projectId: string): Promise<string | null> {
+  const { data } = await adminSupabase
+    .from('job_outputs')
+    .select('storage_url')
+    .eq('project_id', projectId)
+    .eq('type', 'audio')
+    .eq('label', 'voice_track')
+    .not('storage_url', 'is', null)
     .order('created_at', { ascending: false })
     .limit(1)
     .single()
+  return data?.storage_url ?? null
+}
 
-  if (!job) return null
+// Resolves the audio to use for export.
+// Prefers concatenated per-scene audio (most accurate timing).
+// Falls back to a single voice_track (upload or legacy generation).
+// Returns a local temp file path ready for ffmpeg, or null if no audio.
+async function getAudioForExport(
+  projectId: string,
+  sceneRows: SceneRow[],
+  tempDir: string,
+): Promise<string | null> {
+  const sceneIds = sceneRows.map(s => s.id)
+  const audioMap = await getSceneAudioUrls(projectId, sceneIds)
 
-  const { data: output } = await adminSupabase
-    .from('job_outputs')
-    .select('storage_url')
-    .eq('job_id', job.id)
-    .eq('type', 'audio')
-    .not('storage_url', 'is', null)
-    .limit(1)
-    .single()
+  if (sceneIds.every(id => audioMap.has(id))) {
+    // All scenes have per-scene audio — download and concatenate
+    const audioPaths: string[] = []
+    for (const scene of sceneRows) {
+      const url = audioMap.get(scene.id)!
+      const ext = extensionFromUrl(url, 'mp3')
+      const path = join(tempDir, `audio-scene-${scene.order_index}.${ext}`)
+      await downloadToFile(url, path)
+      audioPaths.push(path)
+    }
 
-  return output?.storage_url ?? null
+    const audioListPath = join(tempDir, 'audio-scenes.txt')
+    await writeFile(
+      audioListPath,
+      audioPaths.map(p => `file '${p.replace(/\\/g, '/').replace(/'/g, "'\\''")}'`).join('\n'),
+    )
+    const combinedPath = join(tempDir, 'audio-export.mp3')
+    await runFfmpeg([
+      '-y', '-f', 'concat', '-safe', '0', '-i', audioListPath,
+      '-ar', '44100', '-ac', '2', '-c:a', 'libmp3lame', '-q:a', '2',
+      combinedPath,
+    ])
+    return combinedPath
+  }
+
+  // Fall back to single voice_track
+  const voiceUrl = await getVoiceTrackUrl(projectId)
+  if (!voiceUrl) return null
+  const ext = extensionFromUrl(voiceUrl, 'mp3')
+  const audioPath = join(tempDir, `audio.${ext}`)
+  await downloadToFile(voiceUrl, audioPath)
+  return audioPath
 }
 
 async function normalizeVideo(inputPath: string, outputPath: string) {
@@ -121,6 +179,20 @@ async function finalizeVideo(videoPath: string, outputPath: string) {
   ])
 }
 
+// Extends the last frame of a video to fill a duration gap.
+async function freezeExtendVideo(inputPath: string, extraSeconds: number, outputPath: string) {
+  await runFfmpeg([
+    '-y',
+    '-i', inputPath,
+    '-vf', `tpad=stop_mode=clone:stop_duration=${extraSeconds.toFixed(3)}`,
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-pix_fmt', 'yuv420p',
+    '-an',
+    outputPath,
+  ])
+}
+
 export async function handleExportJob(job: DbJob) {
   console.log(`[export] Job ${job.id} - assembling project ${job.project_id}`)
 
@@ -138,7 +210,6 @@ export async function handleExportJob(job: DbJob) {
   const sceneRows = scenes as SceneRow[]
   const sceneIds = sceneRows.map(s => s.id)
   const videoMap = await getLatestSceneVideos(job.project_id, sceneIds)
-  const audioUrl = await getLatestAudioUrl(job.project_id)
   const missingVideos = sceneRows.filter(scene => !videoMap.has(scene.id))
 
   if (missingVideos.length) {
@@ -153,6 +224,7 @@ export async function handleExportJob(job: DbJob) {
   try {
     await updateJobStatus(job.id, 'processing', {})
 
+    // Normalize each scene video to consistent 1280x720 @ 30fps
     const normalizedPaths: string[] = []
     for (const scene of sceneRows) {
       const url = videoMap.get(scene.id)!
@@ -163,6 +235,7 @@ export async function handleExportJob(job: DbJob) {
       normalizedPaths.push(normalizedPath)
     }
 
+    // Concatenate normalized clips
     const concatListPath = join(tempDir, 'scenes.txt')
     await writeFile(
       concatListPath,
@@ -170,15 +243,29 @@ export async function handleExportJob(job: DbJob) {
         .map(path => `file '${path.replace(/\\/g, '/').replace(/'/g, "'\\''")}'`)
         .join('\n'),
     )
-
     const joinedVideoPath = join(tempDir, 'joined.mp4')
     await concatVideos(concatListPath, joinedVideoPath)
 
+    // Resolve audio (per-scene concat or single voice_track)
+    const audioFilePath = await getAudioForExport(job.project_id, sceneRows, tempDir)
+
     const finalPath = join(tempDir, 'final.mp4')
-    if (audioUrl) {
-      const audioPath = join(tempDir, `audio.${extensionFromUrl(audioUrl, 'audio')}`)
-      await downloadToFile(audioUrl, audioPath)
-      await muxAudio(joinedVideoPath, audioPath, finalPath)
+
+    if (audioFilePath) {
+      // Compare durations. If audio is longer than video, freeze-extend the last frame
+      // so the final cut matches the full audio length instead of cutting scenes short.
+      const videoDur = await getFileDurationSeconds(joinedVideoPath)
+      const audioDur = await getFileDurationSeconds(audioFilePath)
+
+      let videoForMux = joinedVideoPath
+      if (audioDur > videoDur + 0.5) {
+        const paddedPath = join(tempDir, 'padded.mp4')
+        await freezeExtendVideo(joinedVideoPath, audioDur - videoDur, paddedPath)
+        videoForMux = paddedPath
+        console.log(`[export] Audio (${audioDur.toFixed(2)}s) > video (${videoDur.toFixed(2)}s) — extended last frame by ${(audioDur - videoDur).toFixed(2)}s`)
+      }
+
+      await muxAudio(videoForMux, audioFilePath, finalPath)
     } else {
       await finalizeVideo(joinedVideoPath, finalPath)
     }
@@ -202,7 +289,7 @@ export async function handleExportJob(job: DbJob) {
       project_id: job.project_id,
       exported_at: new Date().toISOString(),
       total_duration_seconds: totalDuration,
-      audio_url: audioUrl,
+      has_audio: !!audioFilePath,
       output_url: storageUrl,
       scenes: sceneRows.map(scene => ({
         id: scene.id,
@@ -251,7 +338,7 @@ export async function handleExportJob(job: DbJob) {
       completed_at: new Date().toISOString(),
       output_summary: {
         scene_count: sceneRows.length,
-        has_audio: !!audioUrl,
+        has_audio: !!audioFilePath,
         storage_url: storageUrl,
         total_duration_seconds: totalDuration,
       },
