@@ -69,7 +69,7 @@
             >
               <div class="text-xs text-gray-500">
                 <template v-if="provider.dualCredentials && provider.dualCredentialFields">
-                  Store both credentials as JSON: <code class="bg-white/5 px-1 rounded text-amber-300">{{ '{"' + provider.dualCredentialFields[0].split(' ')[0].toLowerCase() + '":"...","' + provider.dualCredentialFields[1].split(' ')[0].toLowerCase() + '":"..."}' }}</code>
+                  Store both credentials as JSON: <code class="bg-white/5 px-1 rounded text-amber-300">{{ '{"' + provider.dualCredentialFields?.[0]?.split(' ')[0]?.toLowerCase() + '":"...","' + provider.dualCredentialFields?.[1]?.split(' ')[0]?.toLowerCase() + '":"..."}' }}</code>
                 </template>
                 <template v-else>Paste your {{ provider.keyDisplayName ?? provider.displayName }} API key.</template>
               </div>
@@ -100,14 +100,14 @@
         </div>
 
         <!-- Model sub-select for current provider -->
-        <div v-if="currentProviderMeta?.models?.length > 1" class="p-3 border-t border-white/8 bg-white/2">
+        <div v-if="(currentProviderMeta?.models?.length ?? 0) > 1" class="p-3 border-t border-white/8 bg-white/2">
           <label class="text-xs text-gray-500 mb-1.5 block">Model</label>
           <select
             v-model="selectedModelId"
             class="w-full px-3 py-1.5 bg-gray-800 border border-white/10 rounded-lg text-xs text-white focus:outline-none"
             @change="emitChange"
           >
-            <option v-for="m in currentProviderMeta.models" :key="m.id" :value="m.id">
+            <option v-for="m in currentProviderMeta?.models" :key="m.id" :value="m.id">
               {{ m.label }}
             </option>
           </select>
@@ -152,7 +152,7 @@ const DEFAULTS: Record<string, string> = {
   video: 'runway',
 }
 
-const selectedProviderId = ref(props.initialProviderId ?? DEFAULTS[props.stage])
+const selectedProviderId = ref(props.initialProviderId ?? DEFAULTS[props.stage] ?? 'anthropic')
 const selectedModelId = ref(
   props.initialModelId
     ?? PROVIDER_CATALOG.find(p => p.id === selectedProviderId.value)?.defaultModel
@@ -171,7 +171,7 @@ watch(
       id = newInitialId
     } else {
       const firstWithKey = providers.value.find(p => props.savedProviderIds.includes(p.keyProviderId ?? p.id))
-      id = firstWithKey?.id ?? DEFAULTS[props.stage]
+      id = firstWithKey?.id ?? DEFAULTS[props.stage] ?? 'anthropic'
     }
     const model = (newInitialId && props.initialModelId)
       ? props.initialModelId

@@ -7,7 +7,7 @@ export class TogetherImageProvider implements ImageProvider {
   async generate(params: ImageParams): Promise<ImageResult> {
     const client = new Together({ apiKey: params.apiKey })
 
-    const res = await client.images.create({
+    const res = await client.images.generate({
       model: params.model,
       prompt: params.prompt,
       n: 1,

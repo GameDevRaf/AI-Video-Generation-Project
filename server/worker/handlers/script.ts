@@ -68,7 +68,7 @@ Rules:
   } else {
     const scripts = text.split('---SCRIPT_BREAK---').map(s => s.trim()).filter(Boolean)
     for (let i = 0; i < Math.min(scripts.length, 3); i++) {
-      await storeTextOutput(job, scripts[i], `script_candidate_${i + 1}`)
+      await storeTextOutput(job, scripts[i]!, `script_candidate_${i + 1}`)
     }
   }
 

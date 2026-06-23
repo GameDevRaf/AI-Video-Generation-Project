@@ -246,8 +246,8 @@ const selectedNewProviderMeta = computed<ProviderMeta | undefined>(() =>
 const dualCredentialExample = computed(() => {
   const fields = selectedNewProviderMeta.value?.dualCredentialFields
   if (!fields) return ''
-  const k1 = fields[0].split(' ')[0].toLowerCase()
-  const k2 = fields[1].split(' ')[0].toLowerCase()
+  const k1 = fields[0]!.split(' ')[0]!.toLowerCase()
+  const k2 = fields[1]!.split(' ')[0]!.toLowerCase()
   return `{"${k1}":"...","${k2}":"..."}`
 })
 

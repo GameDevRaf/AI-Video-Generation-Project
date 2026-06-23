@@ -53,7 +53,7 @@ export function validateMediaUpload(
   return {
     mediaType,
     mimeType,
-    extension: EXTENSIONS_BY_MIME[mimeType],
+    extension: EXTENSIONS_BY_MIME[mimeType] ?? '',
     filename: safeFilename,
   }
 }

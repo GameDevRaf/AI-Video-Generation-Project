@@ -17,7 +17,7 @@ export function encrypt(plaintext: string): string {
 }
 
 export function decrypt(stored: string): string {
-  const [ivHex, tagHex, ctHex] = stored.split(':')
+  const [ivHex, tagHex, ctHex] = stored.split(':') as [string, string, string]
   const key = derivedKey()
   const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'))
   decipher.setAuthTag(Buffer.from(tagHex, 'hex'))

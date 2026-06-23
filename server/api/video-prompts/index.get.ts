@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
     .eq('job_id', job.id)
     .like('label', 'video_prompt_scene_%')
 
-  return (outputs ?? []).map(o => ({
+  return (outputs ?? []).map((o: { id: string; label: string | null; metadata: unknown }) => ({
     sceneId: o.label!.replace('video_prompt_scene_', ''),
     outputId: o.id,
     prompt: (o.metadata as { content?: string } | null)?.content ?? '',

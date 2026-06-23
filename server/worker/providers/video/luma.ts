@@ -23,7 +23,7 @@ export class LumaVideoProvider implements VideoProvider {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       await new Promise(r => setTimeout(r, POLL_INTERVAL_MS))
 
-      generation = await client.generations.get(generation.id)
+      generation = await client.generations.get(generation.id!)
 
       if (generation.state === 'completed') {
         const videoUrl = (generation.assets as { video?: string } | undefined)?.video

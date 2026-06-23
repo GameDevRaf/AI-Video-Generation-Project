@@ -39,7 +39,7 @@ export const VOICES: Record<'elevenlabs' | 'openai_tts', VoiceOption[]> = {
 export function useAudioStage(projectId: MaybeRef<string>) {
   const settings = ref<AudioSettings>({
     provider: 'elevenlabs',
-    voiceId: VOICES.elevenlabs[0].id,
+    voiceId: VOICES.elevenlabs[0]?.id ?? '',
     speed: 1.0,
     stability: 0.5,
     similarityBoost: 0.75,
@@ -68,7 +68,7 @@ export function useAudioStage(projectId: MaybeRef<string>) {
 
   function setProvider(p: 'elevenlabs' | 'openai_tts') {
     settings.value.provider = p
-    settings.value.voiceId = VOICES[p][0].id
+    settings.value.voiceId = VOICES[p][0]?.id ?? ''
   }
 
   return {

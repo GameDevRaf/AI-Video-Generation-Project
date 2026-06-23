@@ -40,7 +40,7 @@ export class HuggingFaceAudioProvider implements AudioProvider {
 
       const audioBuffer = Buffer.from(await res.arrayBuffer())
       const contentType = res.headers.get('content-type') ?? ''
-      const mimeType = contentType.startsWith('audio/') ? contentType.split(';')[0] : 'audio/wav'
+      const mimeType = contentType.startsWith('audio/') ? (contentType.split(';')[0] ?? 'audio/wav') : 'audio/wav'
       return { audioBuffer, mimeType }
     }
 

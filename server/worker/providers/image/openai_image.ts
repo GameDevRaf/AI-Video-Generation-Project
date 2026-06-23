@@ -15,7 +15,7 @@ export class OpenAIImageProvider implements ImageProvider {
       response_format: 'url',
     })
 
-    const imageUrl = res.data[0]?.url
+    const imageUrl = res.data?.[0]?.url
     if (!imageUrl) throw new Error('OpenAI Images returned no URL')
 
     return { imageUrl }

@@ -1,5 +1,9 @@
 import RunwayML from '@runwayml/sdk'
+import type { ImageToVideoCreateParams } from '@runwayml/sdk/resources/image-to-video.js'
 import type { VideoProvider, VideoParams, VideoResult } from '../types'
+
+const POLL_INTERVAL_MS = 5_000
+const MAX_ATTEMPTS = 120 // 10 min max
 
 export class RunwayVideoProvider implements VideoProvider {
   readonly providerId = 'runway'
@@ -12,19 +16,32 @@ export class RunwayVideoProvider implements VideoProvider {
     }
 
     const task = await client.imageToVideo.create({
-      model: params.model as 'gen4_turbo' | 'gen4',
+      model: params.model,
       promptImage: params.imageUrl,
       promptText: params.prompt,
       ratio: '1280:720',
-      duration: (params.duration ?? 5) as 5 | 10,
-    })
+      duration: params.duration ?? 5,
+    } as ImageToVideoCreateParams)
 
-    // SDK's waitForTaskOutput polls every ~5s until completed or failed
-    const completed = await client.tasks.waitForTaskOutput(task.id)
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      await new Promise(r => setTimeout(r, POLL_INTERVAL_MS))
+      const result = await client.tasks.retrieve(task.id)
 
-    const videoUrl = (completed.output as string[] | undefined)?.[0]
-    if (!videoUrl) throw new Error('Runway task completed but returned no video URL')
+      if (result.status === 'SUCCEEDED') {
+        const videoUrl = result.output[0]
+        if (!videoUrl) throw new Error('Runway task completed but returned no video URL')
+        return { videoUrl }
+      }
 
-    return { videoUrl }
+      if (result.status === 'FAILED') {
+        throw new Error(`Runway generation failed: ${result.failure}`)
+      }
+
+      if (result.status === 'CANCELLED') {
+        throw new Error('Runway generation was cancelled')
+      }
+    }
+
+    throw new Error('Runway video generation timed out after 10 minutes')
   }
 }

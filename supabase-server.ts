@@ -38,9 +38,10 @@ export async function serverSupabaseClient(event: H3Event) {
           const cookieHeader = getHeader(event, 'cookie') ?? ''
           return Object.entries(parseCookieHeader(cookieHeader)).map(([name, value]) => ({ name, value }))
         },
-        setAll: (cookiesToSet) => {
+        setAll: (cookiesToSet: Array<{ name: string; value: string; options?: Record<string, unknown>; maxAge?: number }>) => {
           for (const cookie of cookiesToSet) {
-            const options = { ...cookieOptions }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const options = { ...cookieOptions } as any
             if (cookie.maxAge === 0 || cookie.value === '') {
               deleteCookie(event, cookie.name, options)
               continue
