@@ -2,6 +2,8 @@ import { getProviderKey } from '../lib/getProviderKey'
 import { providerRegistry } from '../providers/registry'
 import { getCatalogEntry } from '../providers/catalog'
 import { updateJobStatus, storeFileOutput } from '../lib/jobs'
+import { adminSupabase } from '../lib/supabase'
+import { getBufferDurationSeconds } from '../../utils/ffmpeg'
 import type { DbJob } from '../../../app/types/database.types'
 
 export async function handleAudioJob(job: DbJob) {
@@ -11,6 +13,7 @@ export async function handleAudioJob(job: DbJob) {
     provider?: string
     model?: string
     speed?: number
+    scene_id?: string  // When set: per-scene generation — label and duration update
   }
 
   const providerId = input.provider ?? job.provider ?? 'elevenlabs'
@@ -45,12 +48,37 @@ export async function handleAudioJob(job: DbJob) {
   })
 
   const ext = mimeType === 'audio/wav' ? 'wav' : 'mp3'
+
+  // Per-scene: label as scene_audio_{sceneId}; whole-script: voice_track
+  const label = input.scene_id ? `scene_audio_${input.scene_id}` : 'voice_track'
   const storagePath = `${job.project_id}/audio/${job.id}_${Date.now()}.${ext}`
 
-  await storeFileOutput(job, audioBuffer, storagePath, 'audio', 'voice_track', mimeType)
+  // Detect duration so video generation and timestamps can use it
+  const durationSeconds = await getBufferDurationSeconds(audioBuffer, ext)
+
+  await storeFileOutput(job, audioBuffer, storagePath, 'audio', label, mimeType, {
+    duration: durationSeconds,
+    scene_id: input.scene_id ?? null,
+  })
+
+  // For per-scene generation: persist duration onto the scene row immediately so
+  // the frontend can recalculate timestamps after all scenes are done.
+  if (input.scene_id && durationSeconds > 0) {
+    await adminSupabase
+      .from('scenes')
+      .update({ duration: durationSeconds, updated_at: new Date().toISOString() })
+      .eq('id', input.scene_id)
+      .eq('project_id', job.project_id)
+  }
 
   await updateJobStatus(job.id, 'completed', {
     completed_at: new Date().toISOString(),
-    output_summary: { provider: providerId, model, voice_id: voiceId },
+    output_summary: {
+      provider: providerId,
+      model,
+      voice_id: voiceId,
+      scene_id: input.scene_id ?? null,
+      duration_seconds: durationSeconds,
+    },
   })
 }

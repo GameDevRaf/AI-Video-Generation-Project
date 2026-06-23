@@ -75,13 +75,13 @@
     <!-- Generate and upload controls -->
     <div class="flex items-center gap-4 flex-wrap">
       <button
-        :disabled="isRunning || !fullScriptText"
+        :disabled="isGenerating || !scenes.length"
         class="px-5 py-2 bg-white text-gray-950 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors disabled:opacity-40"
         @click="generate"
       >
-        <span v-if="isRunning" class="flex items-center gap-2">
+        <span v-if="isGenerating" class="flex items-center gap-2">
           <span class="inline-block w-3.5 h-3.5 border-2 border-gray-400 border-t-gray-800 rounded-full animate-spin" />
-          Generating audio…
+          Generating audio… ({{ jobState.completed }}/{{ jobState.total }})
         </span>
         <span v-else>{{ audioUrl ? 'Regenerate audio' : 'Generate audio' }}</span>
       </button>
@@ -94,7 +94,7 @@
         @change="onAudioFileChange"
       />
       <button
-        :disabled="uploadingAudio"
+        :disabled="uploadingAudio || isGenerating"
         class="px-5 py-2 border border-white/15 text-gray-200 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors disabled:opacity-40"
         @click="audioInput?.click()"
       >
@@ -102,8 +102,8 @@
         <span v-else>{{ audioUrl ? 'Replace with upload' : 'Upload audio' }}</span>
       </button>
 
-      <p v-if="jobError || uploadError || (job?.status === 'failed')" class="text-sm text-amber-400/80">
-        {{ job?.error_message ?? jobError ?? uploadError ?? 'Audio generation failed.' }}
+      <p v-if="generationError || uploadError" class="text-sm text-amber-400/80">
+        {{ generationError ?? uploadError }}
       </p>
     </div>
 
@@ -141,21 +141,15 @@ const projectStore = useProjectStore()
 const audioStage = useAudioStage(toRef(props, 'projectId'))
 const { settings, audioUrl, currentVoices } = audioStage
 
-const { scenes, fetchScenes } = useScenes(toRef(props, 'projectId'))
-const { job, isRunning, error: jobError, startJob } = useJobPoller()
+const { scenes, fetchScenes, recalcTimestamps, persistTimestamps } = useScenes(toRef(props, 'projectId'))
 const audioInput = ref<HTMLInputElement | null>(null)
 const uploadingAudio = ref(false)
 const uploadError = ref<string | null>(null)
+const generationError = ref<string | null>(null)
 
-// Derive the voiceover text from each scene's script_text (spoken words only).
-// Using scenes as the source of truth is safer than the raw full script, because
-// the scene-split step extracts just the spoken words per scene.
-const fullScriptText = computed(() =>
-  [...scenes.value]
-    .sort((a, b) => a.order_index - b.order_index)
-    .map(s => s.script_text)
-    .join('\n\n'),
-)
+// Per-scene audio job tracking
+const jobState = ref({ total: 0, completed: 0, failed: 0, pendingIds: [] as string[] })
+const isGenerating = computed(() => jobState.value.pendingIds.length > 0 || jobState.value.total > 0 && jobState.value.completed + jobState.value.failed < jobState.value.total)
 
 const sceneImagesMap = computed(() => new Map<string, string>())
 
@@ -167,22 +161,129 @@ onMounted(async () => {
   }
 })
 
-watch(job, async (j) => {
-  if (j?.status === 'completed') {
-    await audioStage.fetchExistingAudio()
-  }
+onUnmounted(() => {
+  if (pollTimer !== null) clearTimeout(pollTimer)
 })
 
+let pollTimer: ReturnType<typeof setTimeout> | null = null
+
+async function pollAudioJobs() {
+  if (!jobState.value.pendingIds.length) return
+
+  const stillPending: string[] = []
+  let newCompleted = 0
+  let newFailed = 0
+
+  await Promise.all(
+    jobState.value.pendingIds.map(async (jobId) => {
+      try {
+        const j = await $fetch<{ status: string }>(`/api/jobs/${jobId}`)
+        if (j.status === 'completed') {
+          newCompleted++
+        } else if (j.status === 'failed') {
+          newFailed++
+        } else {
+          stillPending.push(jobId)
+        }
+      } catch {
+        stillPending.push(jobId) // retry next poll
+      }
+    }),
+  )
+
+  jobState.value = {
+    ...jobState.value,
+    completed: jobState.value.completed + newCompleted,
+    failed: jobState.value.failed + newFailed,
+    pendingIds: stillPending,
+  }
+
+  if (stillPending.length > 0) {
+    pollTimer = setTimeout(pollAudioJobs, 2000)
+  } else {
+    await onAllAudioJobsComplete()
+  }
+}
+
+async function onAllAudioJobsComplete() {
+  if (jobState.value.failed > 0) {
+    generationError.value = `Audio generation failed for ${jobState.value.failed} scene(s).`
+  }
+
+  if (jobState.value.failed < jobState.value.total) {
+    // At least some succeeded — combine per-scene audio into a single voice_track for the player
+    try {
+      const result = await $fetch<{ url: string }>('/api/audio/combine', {
+        method: 'POST',
+        body: { projectId: props.projectId },
+      })
+      audioStage.setAudioUrl(result.url)
+    } catch {
+      // Non-fatal: export still uses per-scene audio; player just won't show
+    }
+
+    // Fetch updated scene durations (worker wrote them) and recalculate timestamps
+    await fetchScenes()
+    const recalced = recalcTimestamps([...scenes.value])
+    scenes.value = recalced
+    await persistTimestamps(recalced)
+  }
+
+  jobState.value = { total: 0, completed: 0, failed: 0, pendingIds: [] }
+}
+
 async function generate() {
+  if (isGenerating.value || !scenes.value.length) return
+
+  generationError.value = null
   const provider = projectStore.settings?.default_audio_provider ?? settings.value.provider
-  await startJob(props.projectId, 'audio', {
-    script_text: fullScriptText.value,
+
+  const commonInput = {
     voice_id: settings.value.voiceId,
     provider,
     speed: settings.value.speed,
     stability: settings.value.stability,
     similarity_boost: settings.value.similarityBoost,
-  })
+  }
+
+  // Fire one audio job per scene in parallel
+  const results = await Promise.allSettled(
+    [...scenes.value]
+      .sort((a, b) => a.order_index - b.order_index)
+      .map(scene =>
+        $fetch<{ id: string }>('/api/jobs', {
+          method: 'POST',
+          body: {
+            projectId: props.projectId,
+            type: 'audio',
+            input: {
+              scene_id: scene.id,
+              script_text: scene.script_text,
+              ...commonInput,
+            },
+          },
+        }),
+      ),
+  )
+
+  const successIds = results
+    .filter((r): r is PromiseFulfilledResult<{ id: string }> => r.status === 'fulfilled')
+    .map(r => r.value.id)
+
+  if (!successIds.length) {
+    generationError.value = 'Failed to start audio generation.'
+    return
+  }
+
+  const failedOnStart = results.filter(r => r.status === 'rejected').length
+  jobState.value = {
+    total: results.length,
+    completed: 0,
+    failed: failedOnStart,
+    pendingIds: successIds,
+  }
+
+  pollTimer = setTimeout(pollAudioJobs, 2000)
 }
 
 async function onAudioFileChange(event: Event) {
@@ -199,15 +300,48 @@ async function onAudioFileChange(event: Event) {
     formData.append('type', 'audio')
     formData.append('file', file)
 
-    await $fetch('/api/uploads/media', {
+    const result = await $fetch<{ url: string }>('/api/uploads/media', {
       method: 'POST',
       body: formData,
     })
-    await audioStage.fetchExistingAudio()
+
+    audioStage.setAudioUrl(result.url)
+
+    // Detect total audio duration, then redistribute scene durations proportionally
+    await redistributeSceneDurations(result.url)
   } catch (error) {
     uploadError.value = error instanceof Error ? error.message : 'Audio upload failed.'
   } finally {
     uploadingAudio.value = false
   }
+}
+
+function detectAudioDuration(url: string): Promise<number> {
+  return new Promise((resolve) => {
+    const audio = new Audio()
+    audio.src = url
+    audio.addEventListener('loadedmetadata', () => resolve(audio.duration), { once: true })
+    audio.addEventListener('error', () => resolve(0), { once: true })
+    // Resolve with 0 after 10s so we never hang
+    setTimeout(() => resolve(0), 10_000)
+  })
+}
+
+async function redistributeSceneDurations(audioUrl: string) {
+  if (!scenes.value.length) return
+  const audioDuration = await detectAudioDuration(audioUrl)
+  if (!audioDuration) return
+
+  const currentTotal = scenes.value.reduce((sum, s) => sum + (s.duration ?? 5), 0)
+  if (currentTotal <= 0) return
+
+  const ratio = audioDuration / currentTotal
+  const updated = scenes.value.map(s => ({
+    ...s,
+    duration: Math.max(0.5, (s.duration ?? 5) * ratio),
+  }))
+  const recalced = recalcTimestamps(updated)
+  scenes.value = recalced
+  await persistTimestamps(recalced)
 }
 </script>

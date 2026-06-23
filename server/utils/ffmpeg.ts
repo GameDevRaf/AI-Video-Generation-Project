@@ -58,3 +58,30 @@ export function extensionFromUrl(url: string, fallback: string) {
     return fallback
   }
 }
+
+/** Returns duration in seconds by running ffprobe on an already-on-disk file. Returns 0 on error. */
+export async function getFileDurationSeconds(filePath: string): Promise<number> {
+  try {
+    const { stdout } = await execFileAsync('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'csv=p=0',
+      filePath,
+    ], { maxBuffer: 1024 * 1024 * 4 })
+    return parseFloat(stdout.trim()) || 0
+  } catch {
+    return 0
+  }
+}
+
+/** Returns duration in seconds by writing buffer to a temp file, then running ffprobe. */
+export async function getBufferDurationSeconds(buffer: Buffer, ext: string): Promise<number> {
+  const dir = await mkdtemp(join(tmpdir(), 'ai-video-probe-'))
+  try {
+    const filePath = join(dir, `input.${ext || 'bin'}`)
+    await writeFile(filePath, buffer)
+    return await getFileDurationSeconds(filePath)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}

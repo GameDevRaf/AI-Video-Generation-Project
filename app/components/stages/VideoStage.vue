@@ -146,7 +146,7 @@ const dataLoaded = ref(false)
 onMounted(async () => {
   await fetchScenes()
   await Promise.all([videoStage.fetchPrompts(), videoStage.fetchVideos(), imageStage.fetchImages()])
-  if (scenes.value.length) activeSceneId.value = scenes.value[0].id
+  if (scenes.value.length) activeSceneId.value = scenes.value[0]?.id ?? null
   dataLoaded.value = true
 })
 
@@ -196,6 +196,7 @@ async function generateAllVideos() {
         .filter(s => videoStage.getPrompt(s.id))
         .map(s => {
           const imageUrl = imageStage.getImage(s) ?? undefined
+          const duration = s.duration ?? undefined
           return $fetch('/api/jobs', {
             method: 'POST',
             body: {
@@ -205,6 +206,7 @@ async function generateAllVideos() {
                 scene_id: s.id,
                 prompt: videoStage.getPrompt(s.id),
                 ...(imageUrl ? { image_url: imageUrl } : {}),
+                ...(duration !== undefined ? { duration } : {}),
                 ...(provider ? { provider } : {}),
                 ...(model ? { model } : {}),
               },
@@ -225,11 +227,13 @@ async function generateSingleVideo(sceneId: string, prompt: string) {
   const model = projectStore.settings?.default_video_model ?? undefined
   const scene = scenes.value.find(s => s.id === sceneId)
   const imageUrl = scene ? (imageStage.getImage(scene) ?? undefined) : undefined
+  const duration = scene?.duration ?? undefined
   try {
     await startVideoJob(props.projectId, 'video', {
       scene_id: sceneId,
       prompt,
       ...(imageUrl ? { image_url: imageUrl } : {}),
+      ...(duration !== undefined ? { duration } : {}),
       ...(provider ? { provider } : {}),
       ...(model ? { model } : {}),
     })

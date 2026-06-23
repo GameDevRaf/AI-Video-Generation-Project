@@ -35,7 +35,7 @@ export function useScenes(projectId: MaybeRef<string>) {
     // Optimistic local update
     const idx = scenes.value.findIndex(s => s.id === id)
     if (idx === -1) return
-    scenes.value[idx] = { ...scenes.value[idx], ...patch }
+    scenes.value[idx] = { ...scenes.value[idx]!, ...patch }
 
     // If duration changed, recalc all timestamps locally and persist them
     if ('duration' in patch) {
@@ -55,7 +55,7 @@ export function useScenes(projectId: MaybeRef<string>) {
     if (swapIdx < 0 || swapIdx >= scenes.value.length) return
 
     const list = [...scenes.value]
-    ;[list[idx], list[swapIdx]] = [list[swapIdx], list[idx]]
+    ;[list[idx], list[swapIdx]] = [list[swapIdx]!, list[idx]!]
 
     const recalced = recalcTimestamps(list)
     scenes.value = recalced
@@ -82,5 +82,5 @@ export function useScenes(projectId: MaybeRef<string>) {
     scenes.value.reduce((sum, s) => sum + (s.duration ?? 0), 0),
   )
 
-  return { scenes, loading, error, fetchScenes, updateScene, moveScene, totalDuration }
+  return { scenes, loading, error, fetchScenes, updateScene, moveScene, totalDuration, recalcTimestamps, persistTimestamps }
 }
