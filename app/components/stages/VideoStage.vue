@@ -82,6 +82,8 @@
         :prompt="videoStage.getPrompt(scene.id)"
         :video-url="videoStage.getVideo(scene.id)"
         :image-url="imageStage.getImage(scene)"
+        :generation-prompt="videoStage.getGenerationPrompt(scene.id)"
+        :data-loaded="dataLoaded"
         :is-active="activeSceneId === scene.id"
         :generating="generatingSceneId === scene.id"
         :generating-prompt="singlePromptRunning && regeneratingPromptSceneId === scene.id"
@@ -139,11 +141,13 @@ const regeneratingPromptSceneId = ref<string | null>(null)
 const uploadingSceneId = ref<string | null>(null)
 const providerError = ref<string | undefined>(undefined)
 const previewSceneId = ref<string | null>(null)
+const dataLoaded = ref(false)
 
 onMounted(async () => {
   await fetchScenes()
   await Promise.all([videoStage.fetchPrompts(), videoStage.fetchVideos(), imageStage.fetchImages()])
   if (scenes.value.length) activeSceneId.value = scenes.value[0].id
+  dataLoaded.value = true
 })
 
 watch(promptsJob, async (j) => {

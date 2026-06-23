@@ -81,6 +81,7 @@ describe('image handler', () => {
       'image',
       'scene_image_sc-2',
       'image/png',
+      { prompt: 'Forest' },
     )
   })
 
@@ -92,7 +93,7 @@ describe('image handler', () => {
     await handleImageJob({ ...BASE_JOB, input: { scene_id: 'sc-3', prompt: 'Mountain' } } as never)
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(mockStoreFileOutput).toHaveBeenCalledWith(
-      expect.anything(), IMAGE_PNG, expect.anything(), 'image', expect.anything(), 'image/png',
+      expect.anything(), IMAGE_PNG, expect.anything(), 'image', expect.anything(), 'image/png', expect.any(Object),
     )
   })
 

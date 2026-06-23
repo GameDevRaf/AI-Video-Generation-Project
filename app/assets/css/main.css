@@ -25,3 +25,26 @@ select option:checked {
   background-color: #2d3748;
   color: #ffffff;
 }
+
+/* ── Scrollbars — rectangular, dark theme ──────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}

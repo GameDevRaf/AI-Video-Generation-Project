@@ -45,23 +45,33 @@
         rows="3"
         :placeholder="hasPrompt ? '' : 'Generate prompts first, or type your own...'"
         class="w-full px-3 py-2 bg-white/5 border border-white/8 rounded-lg text-xs text-gray-300 leading-relaxed placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-white/15 resize-none"
+        @input="onInput"
         @blur="saveIfDirty"
       />
     </div>
 
     <div class="flex items-center justify-between gap-2">
       <div class="flex items-center gap-2 min-w-0">
-        <button
-          :disabled="!localPrompt.trim() || generating"
-          class="px-2.5 py-1.5 bg-white/8 border border-white/10 text-white rounded-lg text-xs font-medium hover:bg-white/12 transition-colors disabled:opacity-40 whitespace-nowrap"
-          @click="$emit('generate-image', scene.id, localPrompt)"
-        >
-          <span v-if="generating" class="flex items-center gap-1.5">
-            <span class="inline-block w-2.5 h-2.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-            Gen...
-          </span>
-          <span v-else>{{ imageUrl ? 'Regen image' : 'Gen image' }}</span>
-        </button>
+        <!-- Regen/Gen image button — orange dot appears after tab return when prompt differs from generation -->
+        <div class="relative">
+          <span
+            v-if="sessionMismatch"
+            class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-orange-400 z-10 pointer-events-none"
+            data-testid="prompt-mismatch-dot"
+            title="Current prompt differs from the one used to generate this image"
+          />
+          <button
+            :disabled="!localPrompt.trim() || generating"
+            class="px-2.5 py-1.5 bg-white/8 border border-white/10 text-white rounded-lg text-xs font-medium hover:bg-white/12 transition-colors disabled:opacity-40 whitespace-nowrap"
+            @click="$emit('generate-image', scene.id, localPrompt)"
+          >
+            <span v-if="generating" class="flex items-center gap-1.5">
+              <span class="inline-block w-2.5 h-2.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+              Gen...
+            </span>
+            <span v-else>{{ imageUrl ? 'Regen image' : 'Gen image' }}</span>
+          </button>
+        </div>
 
         <input
           ref="fileInput"
@@ -80,6 +90,7 @@
         </button>
       </div>
 
+      <!-- Regenerate-prompt button -->
       <button
         :disabled="generatingPrompt"
         class="shrink-0 p-1.5 rounded-lg border border-white/10 text-gray-500 hover:text-gray-200 hover:border-white/20 transition-colors disabled:opacity-40"
@@ -107,6 +118,14 @@ const props = defineProps<{
   prompt: string
   hasPrompt: boolean
   imageUrl: string | null
+  /** Prompt that was used when the current image was generated (from server metadata). */
+  generationPrompt?: string
+  /**
+   * Set to true by the parent stage once fetchPrompts + fetchImages have both resolved
+   * (after mount / tab return). The card uses this single rising edge to snapshot whether
+   * there is a mismatch, so the dot never appears during an active in-session edit.
+   */
+  dataLoaded?: boolean
   generating: boolean
   generatingPrompt: boolean
   uploading?: boolean
@@ -123,9 +142,40 @@ const emit = defineEmits<{
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const localPrompt = ref(props.prompt)
+const userHasEdited = ref(false)
+
 const isDirty = computed(() => localPrompt.value !== props.prompt)
 
-watch(() => props.prompt, (val) => { localPrompt.value = val })
+// Orange dot: captured once when the parent signals all server data has loaded (dataLoaded
+// goes false→true on mount / tab return). Frozen for the rest of the session so it never
+// flickers during active editing. Can only be cleared when user generates a new image that
+// matches the current saved prompt, at which point the mismatch is resolved.
+const sessionMismatch = ref(false)
+
+watch(() => props.dataLoaded, (loaded) => {
+  if (loaded) {
+    sessionMismatch.value = !!props.imageUrl && !!props.generationPrompt && props.prompt !== props.generationPrompt
+  }
+}, { immediate: true })
+
+// Clear the dot when a new generation resolves the mismatch.
+watch(() => props.generationPrompt, (gp) => {
+  if (sessionMismatch.value && gp === props.prompt) {
+    sessionMismatch.value = false
+  }
+})
+
+function onInput() {
+  userHasEdited.value = true
+}
+
+watch(() => props.generatingPrompt, (cur, prev) => {
+  if (prev && !cur) userHasEdited.value = false
+})
+
+watch(() => props.prompt, (newVal) => {
+  if (!userHasEdited.value) localPrompt.value = newVal
+})
 
 function save() {
   emit('save-prompt', props.scene.id, localPrompt.value)

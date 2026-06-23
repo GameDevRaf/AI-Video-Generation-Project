@@ -1,4 +1,5 @@
-﻿import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
+import { serverSupabaseUser, serverSupabaseClient } from '~~/supabase-server'
+import { adminSupabase } from '../../worker/lib/supabase'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -7,27 +8,30 @@ export default defineEventHandler(async (event) => {
   const outputId = getRouterParam(event, 'outputId')
   const { prompt } = await readBody<{ prompt: string }>(event)
 
-  const supabase = await serverSupabaseClient(event)
-
-  const { data: output } = await supabase
+  const { data: output } = await adminSupabase
     .from('job_outputs')
-    .select('id, jobs!inner(user_id)')
+    .select('id, project_id')
     .eq('id', outputId)
     .single()
 
-  const ownerUserId = (output?.jobs as unknown as { user_id: string } | null)?.user_id
-  if (!output || ownerUserId !== user.id) {
-    throw createError({ statusCode: 403, message: 'Not found' })
-  }
+  if (!output?.project_id) throw createError({ statusCode: 404, message: 'Not found' })
 
-  const { data, error } = await supabase
+  const supabase = await serverSupabaseClient(event)
+  const { data: project } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('id', output.project_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!project) throw createError({ statusCode: 403, message: 'Not found' })
+
+  const { error } = await adminSupabase
     .from('job_outputs')
     .update({ metadata: { content: prompt } })
     .eq('id', outputId)
-    .select('id')
-    .single()
 
   if (error) throw createError({ statusCode: 500, message: error.message })
 
-  return data
+  return { id: outputId }
 })

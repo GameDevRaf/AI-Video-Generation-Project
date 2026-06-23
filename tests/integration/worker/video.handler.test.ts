@@ -79,6 +79,7 @@ describe('video handler', () => {
       'video',
       'scene_video_sc-2',
       'video/mp4',
+      { prompt: 'City' },
     )
   })
 

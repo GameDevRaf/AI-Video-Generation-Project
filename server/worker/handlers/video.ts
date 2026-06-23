@@ -50,7 +50,7 @@ export async function handleVideoJob(job: DbJob) {
   const ext = mime.split('/')[1]?.split(';')[0] ?? 'mp4'
   const storagePath = `${job.project_id}/videos/${input.scene_id}_${Date.now()}.${ext}`
 
-  await storeFileOutput(job, buffer, storagePath, 'video', `scene_video_${input.scene_id}`, mime)
+  await storeFileOutput(job, buffer, storagePath, 'video', `scene_video_${input.scene_id}`, mime, { prompt: input.prompt })
 
   await updateJobStatus(job.id, 'completed', {
     completed_at: new Date().toISOString(),

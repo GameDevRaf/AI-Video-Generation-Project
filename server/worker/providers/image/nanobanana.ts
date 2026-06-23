@@ -15,12 +15,6 @@ export class NanaBananaImageProvider implements ImageProvider {
       contents: [{ parts: [{ text: params.prompt }] }],
       generationConfig: {
         responseModalities: ['TEXT', 'IMAGE'],
-        responseFormat: {
-          image: {
-            aspectRatio: params.aspectRatio ?? '16:9',
-            imageSize: '2K',
-          },
-        },
       },
     }
 

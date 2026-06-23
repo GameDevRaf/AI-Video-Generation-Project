@@ -48,6 +48,7 @@ export async function storeFileOutput(
   type: OutputType,
   label: string,
   mimeType: string,
+  metadata?: Record<string, unknown>,
 ): Promise<{ outputId: string; storageUrl: string }> {
   // Upload to Supabase Storage bucket "assets"
   const { error: uploadError } = await adminSupabase.storage
@@ -69,6 +70,7 @@ export async function storeFileOutput(
       storage_url: storageUrl,
       storage_path: storagePath,
       mime_type: mimeType,
+      ...(metadata ? { metadata } : {}),
     })
     .select('id')
     .single()

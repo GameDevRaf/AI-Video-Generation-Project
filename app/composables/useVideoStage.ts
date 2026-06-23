@@ -7,6 +7,7 @@ export interface SceneVideoPrompt {
 export function useVideoStage(projectId: MaybeRef<string>) {
   const prompts = ref<Map<string, SceneVideoPrompt>>(new Map())
   const videos = ref<Map<string, string>>(new Map())
+  const generationPrompts = ref<Map<string, string>>(new Map())
   const loading = ref(false)
 
   async function fetchPrompts() {
@@ -22,10 +23,13 @@ export function useVideoStage(projectId: MaybeRef<string>) {
   }
 
   async function fetchVideos() {
-    const data = await $fetch<{ sceneId: string; url: string }[]>('/api/videos', {
+    const data = await $fetch<{ sceneId: string; url: string; generationPrompt: string }[]>('/api/videos', {
       query: { projectId: toValue(projectId) },
     })
     videos.value = new Map(data.map(v => [v.sceneId, v.url]))
+    generationPrompts.value = new Map(
+      data.filter(v => v.generationPrompt).map(v => [v.sceneId, v.generationPrompt]),
+    )
   }
 
   async function savePrompt(sceneId: string, newText: string) {
@@ -46,6 +50,10 @@ export function useVideoStage(projectId: MaybeRef<string>) {
     return videos.value.get(sceneId) ?? null
   }
 
+  function getGenerationPrompt(sceneId: string): string {
+    return generationPrompts.value.get(sceneId) ?? ''
+  }
+
   function hasPrompt(sceneId: string): boolean {
     return prompts.value.has(sceneId) && !!prompts.value.get(sceneId)?.prompt
   }
@@ -56,12 +64,14 @@ export function useVideoStage(projectId: MaybeRef<string>) {
   return {
     prompts,
     videos,
+    generationPrompts,
     loading,
     fetchPrompts,
     fetchVideos,
     savePrompt,
     getPrompt,
     getVideo,
+    getGenerationPrompt,
     hasPrompt,
     hasAnyVideo,
     hasAnyPrompt,

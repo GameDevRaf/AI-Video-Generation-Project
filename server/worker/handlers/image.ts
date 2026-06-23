@@ -48,7 +48,7 @@ export async function handleImageJob(job: DbJob) {
   const ext = mime.split('/')[1]?.split(';')[0] ?? 'png'
   const storagePath = `${job.project_id}/images/${input.scene_id}_${Date.now()}.${ext}`
 
-  await storeFileOutput(job, buffer, storagePath, 'image', `scene_image_${input.scene_id}`, mime)
+  await storeFileOutput(job, buffer, storagePath, 'image', `scene_image_${input.scene_id}`, mime, { prompt: input.prompt })
 
   await updateJobStatus(job.id, 'completed', {
     completed_at: new Date().toISOString(),

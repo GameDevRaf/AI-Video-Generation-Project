@@ -43,6 +43,8 @@
         :prompt="imageStage.getPrompt(scene)"
         :has-prompt="imageStage.hasPrompt(scene)"
         :image-url="imageStage.getImage(scene)"
+        :generation-prompt="imageStage.getGenerationPrompt(scene)"
+        :data-loaded="dataLoaded"
         :generating="generatingSceneId === scene.id"
         :generating-prompt="promptsRunning || singlePromptRunning && regeneratingPromptSceneId === scene.id"
         :uploading="uploadingSceneId === scene.id"
@@ -98,6 +100,7 @@ const regeneratingPromptSceneId = ref<string | null>(null)
 const uploadingSceneId = ref<string | null>(null)
 const imageProviderError = ref<string | undefined>(undefined)
 const previewSceneId = ref<string | null>(null)
+const dataLoaded = ref(false)
 
 const promptEditMode = computed(() => props.promptEditMode ?? 'after_generation')
 const hasAnyPrompt = computed(() => imageStage.prompts.value.size > 0)
@@ -105,6 +108,7 @@ const hasAnyPrompt = computed(() => imageStage.prompts.value.size > 0)
 onMounted(async () => {
   await fetchScenes()
   await Promise.all([imageStage.fetchPrompts(), imageStage.fetchImages()])
+  dataLoaded.value = true
 })
 
 // After bulk prompt job finishes, reload prompts

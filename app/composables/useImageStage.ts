@@ -9,8 +9,10 @@ export interface ScenePrompt {
 export function useImageStage(projectId: MaybeRef<string>) {
   // Map of sceneId → { outputId, prompt }
   const prompts = ref<Map<string, ScenePrompt>>(new Map())
-  // Map of sceneId → image URL (populated when an image job completes)
+  // Map of sceneId → image URL
   const images = ref<Map<string, string>>(new Map())
+  // Map of sceneId → prompt that was used when the image was generated
+  const generationPrompts = ref<Map<string, string>>(new Map())
   const loading = ref(false)
 
   async function fetchPrompts() {
@@ -26,10 +28,13 @@ export function useImageStage(projectId: MaybeRef<string>) {
   }
 
   async function fetchImages() {
-    const data = await $fetch<{ sceneId: string; url: string }[]>('/api/images', {
+    const data = await $fetch<{ sceneId: string; url: string; generationPrompt: string }[]>('/api/images', {
       query: { projectId: toValue(projectId) },
     })
     images.value = new Map(data.map(i => [i.sceneId, i.url]))
+    generationPrompts.value = new Map(
+      data.filter(i => i.generationPrompt).map(i => [i.sceneId, i.generationPrompt]),
+    )
   }
 
   function setPromptsFromJob(outputs: { sceneId: string; outputId: string; prompt: string }[]) {
@@ -39,7 +44,7 @@ export function useImageStage(projectId: MaybeRef<string>) {
   async function savePrompt(sceneId: string, newText: string) {
     const entry = prompts.value.get(sceneId)
     if (!entry) return
-    // Optimistic
+    // Optimistic update so the watcher sees the new value immediately
     prompts.value.set(sceneId, { ...entry, prompt: newText })
     await $fetch(`/api/image-prompts/${entry.outputId}`, {
       method: 'PATCH',
@@ -59,5 +64,13 @@ export function useImageStage(projectId: MaybeRef<string>) {
     return images.value.get(scene.id) ?? null
   }
 
-  return { prompts, images, loading, fetchPrompts, fetchImages, setPromptsFromJob, savePrompt, getPrompt, hasPrompt, getImage }
+  function getGenerationPrompt(scene: DbScene): string {
+    return generationPrompts.value.get(scene.id) ?? ''
+  }
+
+  return {
+    prompts, images, generationPrompts, loading,
+    fetchPrompts, fetchImages, setPromptsFromJob, savePrompt,
+    getPrompt, hasPrompt, getImage, getGenerationPrompt,
+  }
 }

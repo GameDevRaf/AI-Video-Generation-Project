@@ -1,4 +1,6 @@
-﻿import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
+import { serverSupabaseUser } from '~~/supabase-server'
+import { adminSupabase } from '../../worker/lib/supabase'
+import { serverSupabaseClient } from '~~/supabase-server'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -7,28 +9,33 @@ export default defineEventHandler(async (event) => {
   const outputId = getRouterParam(event, 'outputId')
   const { prompt } = await readBody<{ prompt: string }>(event)
 
-  const supabase = await serverSupabaseClient(event)
-
-  // Ownership check via job â†’ user_id
-  const { data: output } = await supabase
+  // Fetch the output record without RLS so we can read by plain ID.
+  const { data: output } = await adminSupabase
     .from('job_outputs')
-    .select('id, jobs!inner(user_id)')
+    .select('id, project_id')
     .eq('id', outputId)
     .single()
 
-  const ownerUserId = (output?.jobs as unknown as { user_id: string } | null)?.user_id
-  if (!output || ownerUserId !== user.id) {
-    throw createError({ statusCode: 403, message: 'Not found' })
-  }
+  if (!output?.project_id) throw createError({ statusCode: 404, message: 'Not found' })
 
-  const { data, error } = await supabase
+  // Verify the authenticated user owns the project — use user client so RLS enforces this.
+  const supabase = await serverSupabaseClient(event)
+  const { data: project } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('id', output.project_id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (!project) throw createError({ statusCode: 403, message: 'Not found' })
+
+  // Update with the admin client (user client RLS blocks UPDATE on job_outputs).
+  const { error } = await adminSupabase
     .from('job_outputs')
     .update({ metadata: { content: prompt } })
     .eq('id', outputId)
-    .select('id')
-    .single()
 
   if (error) throw createError({ statusCode: 500, message: error.message })
 
-  return data
+  return { id: outputId }
 })
