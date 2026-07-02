@@ -20,7 +20,7 @@ export class ReplicateVideoProvider implements VideoProvider {
 
     const input: Record<string, unknown> = {
       prompt: params.prompt,
-      duration: params.duration ?? 5,
+      duration: Math.round(params.duration ?? 5),
       aspect_ratio: params.aspectRatio ?? '16:9',
     }
     if (params.imageUrl) {

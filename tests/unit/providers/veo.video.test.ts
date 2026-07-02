@@ -87,6 +87,26 @@ describe('VeoVideoProvider', () => {
     expect(result.mimeType).toBe('video/mp4')
   })
 
+  it('rounds a fractional duration to the nearest integer second', async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeCreateResponse())
+      .mockResolvedValueOnce(makePollDone())
+      .mockResolvedValueOnce(makeVideoDownload())
+
+    const { VeoVideoProvider } = await import('../../../server/worker/providers/video/veo')
+    const promise = new VeoVideoProvider().generate({
+      job: {} as never, apiKey: 'goog-key', model: 'veo-3.1-generate-preview',
+      prompt: 'A cat video', duration: 6.5, aspectRatio: '16:9',
+    })
+
+    await vi.advanceTimersByTimeAsync(10_500)
+    await promise
+
+    const [, opts] = mockFetch.mock.calls[0]
+    const body = JSON.parse(opts.body)
+    expect(body.parameters.durationSeconds).toBe(7)
+  })
+
   it('throws when create returns no operation name', async () => {
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) })
     const { VeoVideoProvider } = await import('../../../server/worker/providers/video/veo')

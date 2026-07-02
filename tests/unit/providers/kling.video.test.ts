@@ -55,6 +55,25 @@ describe('KlingVideoProvider', () => {
     expect(result.videoUrl).toBe('https://klingai.com/v.mp4')
   })
 
+  it('rounds a fractional duration to the nearest integer second', async () => {
+    let sentBody: { duration?: string } = {}
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      if (init?.method === 'POST') {
+        sentBody = JSON.parse(init.body as string)
+        return { ok: true, json: async () => ({ data: { task_id: 'task-4' } }) }
+      }
+      return { ok: true, json: async () => ({ data: { task_status: 'succeed', task_result: { videos: [{ url: 'https://klingai.com/v.mp4' }] } } }) }
+    }))
+
+    const { KlingVideoProvider } = await import('../../../server/worker/providers/video/kling')
+    const promise = new KlingVideoProvider().generate({
+      job: {} as never, apiKey: JSON.stringify(CREDS), model: 'm', prompt: 'p', duration: 5.9,
+    })
+    await vi.advanceTimersByTimeAsync(11_000)
+    await promise
+    expect(sentBody.duration).toBe('6')
+  })
+
   it('resolves with videoUrl from task_result', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
       if (init?.method === 'POST') {

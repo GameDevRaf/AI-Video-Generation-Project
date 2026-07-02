@@ -45,6 +45,20 @@ describe('ReplicateVideoProvider', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 
+  it('rounds a fractional duration to the nearest integer second', async () => {
+    let sentBody: { input?: { duration?: number } } = {}
+    mockFetch.mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      sentBody = JSON.parse(init.body as string)
+      return { ok: true, json: async () => ({ id: 'v-4', status: 'succeeded', output: ['https://delivery.replicate.com/vid.mp4'] }) }
+    })
+    const { ReplicateVideoProvider } = await import('../../../server/worker/providers/video/replicate_video')
+    await new ReplicateVideoProvider().generate({
+      job: {} as never, apiKey: 'k', model: 'minimax/video-01-live',
+      prompt: 'p', duration: 4.2, aspectRatio: '16:9',
+    })
+    expect(sentBody.input?.duration).toBe(4)
+  })
+
   it('throws on bad model format', async () => {
     const { ReplicateVideoProvider } = await import('../../../server/worker/providers/video/replicate_video')
     await expect(

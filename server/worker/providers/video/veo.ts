@@ -42,7 +42,7 @@ export class VeoVideoProvider implements VideoProvider {
         instances: [instance],
         parameters: {
           aspectRatio: params.aspectRatio ?? '16:9',
-          durationSeconds: String(Math.min(params.duration ?? 8, 8)),
+          durationSeconds: Math.round(Math.max(4, Math.min(params.duration ?? 8, 8))),
           resolution: '720p',
         },
       }),

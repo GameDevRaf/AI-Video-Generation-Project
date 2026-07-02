@@ -12,7 +12,7 @@ export class FalVideoProvider implements VideoProvider {
       input: {
         prompt: params.prompt,
         image_url: params.imageUrl,
-        duration: params.duration ?? 5,
+        duration: Math.round(params.duration ?? 5),
         aspect_ratio: params.aspectRatio ?? '16:9',
       },
     }) as { data: { video?: { url: string }; url?: string } }

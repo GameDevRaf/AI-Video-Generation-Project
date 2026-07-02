@@ -20,7 +20,7 @@ export class RunwayVideoProvider implements VideoProvider {
       promptImage: params.imageUrl,
       promptText: params.prompt,
       ratio: '1280:720',
-      duration: params.duration ?? 5,
+      duration: Math.round(params.duration ?? 5),
     } as ImageToVideoCreateParams)
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {

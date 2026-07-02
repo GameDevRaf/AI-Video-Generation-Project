@@ -32,6 +32,19 @@ describe('LumaVideoProvider', () => {
     expect(result.videoUrl).toBe('https://luma.ai/v.mp4')
   }, 10_000)
 
+  it('rounds a fractional duration to the nearest integer second', async () => {
+    mockGenCreate.mockResolvedValueOnce({ id: 'gen-4', state: 'dreaming' })
+    mockGet.mockResolvedValueOnce({ id: 'gen-4', state: 'completed', assets: { video: 'https://luma.ai/v.mp4' } })
+
+    const { LumaVideoProvider } = await import('../../../server/worker/providers/video/luma')
+    const promise = new LumaVideoProvider().generate({
+      job: {} as never, apiKey: 'k', model: 'ray-2', prompt: 'p', duration: 4.4,
+    })
+    await vi.advanceTimersByTimeAsync(4_000)
+    await promise
+    expect(mockGenCreate).toHaveBeenCalledWith(expect.objectContaining({ duration: '4s' }))
+  })
+
   it('polls until state is "completed" (fake timers)', async () => {
     mockGenCreate.mockResolvedValueOnce({ id: 'gen-2', state: 'dreaming' })
     mockGet

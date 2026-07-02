@@ -14,7 +14,7 @@ export class LumaVideoProvider implements VideoProvider {
       model: params.model as 'ray-2' | 'ray-flash-2',
       prompt: params.prompt,
       resolution: '720p',
-      duration: `${params.duration ?? 5}s`,
+      duration: `${Math.round(params.duration ?? 5)}s`,
       ...(params.imageUrl
         ? { keyframes: { frame0: { type: 'image', url: params.imageUrl } } }
         : {}),

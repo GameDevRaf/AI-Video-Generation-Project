@@ -42,7 +42,7 @@ export class KlingVideoProvider implements VideoProvider {
         model_name: params.model,
         image: params.imageUrl,
         prompt: params.prompt,
-        duration: String(params.duration ?? 5),
+        duration: String(Math.round(params.duration ?? 5)),
         aspect_ratio: params.aspectRatio ?? '16:9',
       }),
     })
