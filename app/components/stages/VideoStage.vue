@@ -125,6 +125,7 @@ const props = defineProps<{ projectId: string }>()
 defineEmits<{ done: [] }>()
 
 const projectStore = useProjectStore()
+const jobsStore = useJobsStore()
 
 const { scenes, loading: scenesLoading, fetchScenes } = useScenes(toRef(props, 'projectId'))
 const videoStage = useVideoStage(toRef(props, 'projectId'))
@@ -185,39 +186,44 @@ async function generateSinglePrompt(sceneId: string) {
 
 async function generateAllVideos() {
   if (generatingAllVideos.value) return
+  const targets = scenes.value.filter(s => videoStage.getPrompt(s.id))
+  if (!targets.length) return
+
   generatingAllVideos.value = true
   // Fire all video jobs in parallel (each takes 60–120 s; sequential would be too slow).
   // Server-side dedup returns any already-queued job instead of creating a duplicate.
   const provider = projectStore.settings?.default_video_provider ?? undefined
   const model = projectStore.settings?.default_video_model ?? undefined
-  try {
-    await Promise.all(
-      scenes.value
-        .filter(s => videoStage.getPrompt(s.id))
-        .map(s => {
-          const imageUrl = imageStage.getImage(s) ?? undefined
-          const duration = s.duration ?? undefined
-          return $fetch('/api/jobs', {
-            method: 'POST',
-            body: {
-              projectId: props.projectId,
-              type: 'video',
-              input: {
-                scene_id: s.id,
-                prompt: videoStage.getPrompt(s.id),
-                ...(imageUrl ? { image_url: imageUrl } : {}),
-                ...(duration !== undefined ? { duration } : {}),
-                ...(provider ? { provider } : {}),
-                ...(model ? { model } : {}),
-              },
-            },
-          }).catch(() => null)
-        }),
-    )
-    await videoStage.fetchVideos()
-  } finally {
-    generatingAllVideos.value = false
+
+  // Track each submitted job until it reaches a terminal state — a bare POST /api/jobs
+  // only confirms the job was queued, not that generation finished, so the button must
+  // stay disabled/loading and previews must refresh as each job actually completes.
+  let remaining = targets.length
+  function settleOne() {
+    remaining -= 1
+    if (remaining === 0) generatingAllVideos.value = false
   }
+
+  await Promise.all(targets.map(async (s) => {
+    const imageUrl = imageStage.getImage(s) ?? undefined
+    const duration = s.duration ?? undefined
+    try {
+      const job = await jobsStore.createJob(props.projectId, 'video', {
+        scene_id: s.id,
+        prompt: videoStage.getPrompt(s.id),
+        ...(imageUrl ? { image_url: imageUrl } : {}),
+        ...(duration !== undefined ? { duration } : {}),
+        ...(provider ? { provider } : {}),
+        ...(model ? { model } : {}),
+      })
+      jobsStore.startPolling(job.id, (finishedJob) => {
+        const refreshed = finishedJob.status === 'completed' ? videoStage.fetchVideos().catch(() => {}) : Promise.resolve()
+        refreshed.then(() => settleOne())
+      })
+    } catch {
+      settleOne()
+    }
+  }))
 }
 
 async function generateSingleVideo(sceneId: string, prompt: string) {

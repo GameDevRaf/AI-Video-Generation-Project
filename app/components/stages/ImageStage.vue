@@ -27,9 +27,23 @@
         <span v-else>{{ hasAnyPrompt ? 'Regenerate all prompts' : 'Generate all prompts' }}</span>
       </button>
 
+      <!-- Generate all images -->
+      <button
+        :disabled="generatingAllImages || imageJobRunning || !hasAnyPrompt || !scenes.length"
+        class="px-5 py-2 border border-white/15 text-gray-200 rounded-lg text-sm font-medium hover:bg-white/5 transition-colors disabled:opacity-40"
+        @click="generateAllImages"
+      >
+        <span v-if="generatingAllImages || imageJobRunning" class="flex items-center gap-2">
+          <span class="inline-block w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+          Generating images…
+        </span>
+        <span v-else>{{ hasAnyImage ? 'Regenerate all images' : 'Generate all images' }}</span>
+      </button>
+
       <p v-if="promptsJob?.status === 'failed'" class="text-sm text-red-400">
         {{ promptsJob.error_message ?? 'Prompt generation failed.' }}
       </p>
+      <p v-if="allImagesError" class="text-sm text-amber-400/80">{{ allImagesError }}</p>
     </div>
 
     <!-- Scene grid -->
@@ -87,6 +101,7 @@ const props = defineProps<{
 defineEmits<{ done: [] }>()
 
 const projectStore = useProjectStore()
+const jobsStore = useJobsStore()
 
 const { scenes, loading: scenesLoading, fetchScenes } = useScenes(toRef(props, 'projectId'))
 const imageStage = useImageStage(toRef(props, 'projectId'))
@@ -96,14 +111,17 @@ const { job: singlePromptJob, isRunning: singlePromptRunning, startJob: startSin
 const { job: imageJob, isRunning: imageJobRunning, startJob: startImageJob } = useJobPoller()
 
 const generatingSceneId = ref<string | null>(null)
+const generatingAllImages = ref(false)
 const regeneratingPromptSceneId = ref<string | null>(null)
 const uploadingSceneId = ref<string | null>(null)
 const imageProviderError = ref<string | undefined>(undefined)
+const allImagesError = ref<string | undefined>(undefined)
 const previewSceneId = ref<string | null>(null)
 const dataLoaded = ref(false)
 
 const promptEditMode = computed(() => props.promptEditMode ?? 'after_generation')
 const hasAnyPrompt = computed(() => imageStage.prompts.value.size > 0)
+const hasAnyImage = computed(() => imageStage.images.value.size > 0)
 
 onMounted(async () => {
   await fetchScenes()
@@ -165,6 +183,49 @@ async function generateImage(sceneId: string, prompt: string) {
     imageProviderError.value = 'Failed to start image job.'
     generatingSceneId.value = null
   }
+}
+
+async function generateAllImages() {
+  if (generatingAllImages.value) return
+  const targets = scenes.value.filter(s => imageStage.hasPrompt(s))
+  if (!targets.length) return
+
+  generatingAllImages.value = true
+  allImagesError.value = undefined
+  const provider = projectStore.settings?.default_image_provider ?? undefined
+  const model = projectStore.settings?.default_image_model ?? undefined
+
+  // Track each submitted job until it reaches a terminal state — a bare POST /api/jobs
+  // only confirms the job was queued, not that generation finished, so the button must
+  // stay disabled/loading and previews must refresh as each job actually completes.
+  let remaining = targets.length
+  let hadFailure = false
+  function settleOne(failed: boolean) {
+    if (failed) hadFailure = true
+    remaining -= 1
+    if (remaining === 0) {
+      generatingAllImages.value = false
+      if (hadFailure) allImagesError.value = 'Some images failed to generate.'
+    }
+  }
+
+  await Promise.all(targets.map(async (s) => {
+    try {
+      const job = await jobsStore.createJob(props.projectId, 'image', {
+        scene_id: s.id,
+        prompt: imageStage.getPrompt(s),
+        ...(provider ? { provider } : {}),
+        ...(model ? { model } : {}),
+      })
+      jobsStore.startPolling(job.id, (finishedJob) => {
+        const failed = finishedJob.status !== 'completed'
+        const refreshed = failed ? Promise.resolve() : imageStage.fetchImages().catch(() => {})
+        refreshed.then(() => settleOne(failed))
+      })
+    } catch {
+      settleOne(true)
+    }
+  }))
 }
 
 async function uploadImage(sceneId: string, file: File) {

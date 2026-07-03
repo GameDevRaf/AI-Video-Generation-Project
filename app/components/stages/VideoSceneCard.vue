@@ -7,7 +7,7 @@
       <span class="text-xs font-medium text-gray-500">
         Scene {{ scene.order_index + 1 }}{{ scene.title ? ` - ${scene.title}` : '' }}
       </span>
-      <span class="text-xs text-gray-600">{{ scene.duration }}s</span>
+      <span class="text-xs text-gray-600">{{ Math.round(scene.duration ?? 0) }}s</span>
     </div>
 
     <div class="w-full aspect-video rounded-lg overflow-hidden bg-black border border-white/8 relative">
