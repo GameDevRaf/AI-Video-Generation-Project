@@ -41,7 +41,7 @@
           />
         </div>
 
-        <div class="flex items-end gap-4">
+        <div class="flex items-end gap-4 flex-wrap">
           <div class="flex flex-col gap-1.5 w-48">
             <label class="text-sm text-gray-300" for="tone">Tone</label>
             <select
@@ -52,6 +52,25 @@
             >
               <option v-for="t in tones" :key="t" :value="t">{{ t }}</option>
             </select>
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label class="text-sm text-gray-300">Target length</label>
+            <div class="flex gap-1 p-1 bg-white/5 rounded-lg w-fit">
+              <button
+                v-for="preset in lengthPresets"
+                :key="preset.seconds"
+                type="button"
+                :disabled="isRunning"
+                class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-50"
+                :class="targetDuration === preset.seconds
+                  ? 'bg-white text-gray-950'
+                  : 'text-gray-400 hover:text-white'"
+                @click="setTargetDuration(preset.seconds)"
+              >
+                {{ preset.label }}
+              </button>
+            </div>
           </div>
 
           <button
@@ -68,6 +87,7 @@
         </div>
 
         <p v-if="pollerError" class="text-sm text-red-400">{{ pollerError }}</p>
+        <p v-if="targetDurationError" class="text-sm text-amber-400/80">{{ targetDurationError }}</p>
       </div>
 
       <!-- Script candidates -->
@@ -83,7 +103,15 @@
               : 'border-white/10 bg-white/3 hover:border-white/20 hover:bg-white/5'"
             @click="select(script)"
           >
-            <span class="text-xs font-medium text-gray-400">Option {{ i + 1 }}</span>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-gray-400">Option {{ i + 1 }}</span>
+              <span
+                class="text-xs"
+                :class="estimateSpokenSeconds(countWords(scriptText(script))) > targetDuration ? 'text-amber-400/80' : 'text-gray-600'"
+              >
+                ~{{ Math.round(estimateSpokenSeconds(countWords(scriptText(script)))) }}s · ~{{ countWords(scriptText(script)) }}w
+              </span>
+            </div>
             <p class="text-sm text-gray-200 leading-relaxed line-clamp-6 whitespace-pre-wrap">{{ scriptText(script) }}</p>
             <span v-if="selectedId === script.id" class="text-xs text-white/60 font-medium">Selected</span>
           </button>
@@ -98,6 +126,7 @@
         :initial-text="scriptText(selectedScript)"
         :output-id="selectedScript.id"
         @use="onUse"
+        @regenerate="onRegenerate"
       />
     </template>
   </section>
@@ -105,6 +134,8 @@
 
 <script setup lang="ts">
 import type { DbJobOutput } from '~/types/database.types'
+import { VIDEO_FORMAT } from '../../../shared/config/videoFormat'
+import { countWords, estimateSpokenSeconds } from '../../../shared/utils/scriptLength'
 
 const props = defineProps<{ projectId: string }>()
 const emit = defineEmits<{ done: [] }>()
@@ -113,11 +144,32 @@ const projectStore = useProjectStore()
 const workspace = useWorkspaceStore()
 
 const tones = ['Educational', 'Narrative', 'Promotional', 'Conversational', 'Documentary', 'Inspirational']
+const lengthPresets = [
+  { seconds: 15, label: '15s' },
+  { seconds: 30, label: '30s' },
+  { seconds: 60, label: '60s' },
+  { seconds: 90, label: '90s' },
+  { seconds: VIDEO_FORMAT.maxDuration, label: '3m' },
+]
 
 const idea = ref('')
 const tone = ref('Educational')
 const selectedId = ref<string | null>(null)
 const selectedScript = ref<DbJobOutput | null>(null)
+const targetDurationError = ref<string | undefined>(undefined)
+
+const targetDuration = computed(() =>
+  Math.min(projectStore.settings?.target_duration_seconds ?? 180, VIDEO_FORMAT.maxDuration),
+)
+
+async function setTargetDuration(seconds: number) {
+  targetDurationError.value = undefined
+  try {
+    await projectStore.updateSettings({ target_duration_seconds: Math.min(seconds, VIDEO_FORMAT.maxDuration) })
+  } catch {
+    targetDurationError.value = 'Failed to save target length — please try again.'
+  }
+}
 
 const { job, isRunning, error: pollerError, startJob } = useJobPoller()
 
@@ -158,9 +210,16 @@ async function generate() {
   await startJob(props.projectId, 'script', {
     idea: idea.value.trim(),
     tone: tone.value,
+    target_duration_seconds: targetDuration.value,
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
   })
+}
+
+function onRegenerate() {
+  selectedId.value = null
+  selectedScript.value = null
+  generate()
 }
 
 function select(script: DbJobOutput) {

@@ -3,6 +3,8 @@ import { adminSupabase } from '../lib/supabase'
 import { providerRegistry } from '../providers/registry'
 import { getCatalogEntry } from '../providers/catalog'
 import { updateJobStatus, storeTextOutput } from '../lib/jobs'
+import { VIDEO_FORMAT } from '../../../shared/config/videoFormat'
+import { targetWordCount } from '../../../shared/utils/scriptLength'
 import type { DbJob } from '../../../app/types/database.types'
 
 async function resolveScriptProvider(job: DbJob, inputProvider?: string): Promise<string> {
@@ -21,6 +23,7 @@ export async function handleScriptJob(job: DbJob) {
     tone: string
     existing_script?: string
     refinement_instructions?: string
+    target_duration_seconds?: number
     provider?: string
     model?: string
   }
@@ -31,19 +34,25 @@ export async function handleScriptJob(job: DbJob) {
 
   const isRefinement = !!input.existing_script
 
+  const targetSeconds = Math.min(input.target_duration_seconds ?? 180, VIDEO_FORMAT.maxDuration)
+  const targetWords = targetWordCount(targetSeconds)
+  const targetLine = `Target length: approximately ${targetWords} words (~${targetSeconds}s of narration at ~130 words per minute). Do not significantly exceed this length.`
+
   const systemPrompt = isRefinement
     ? `You are a professional video scriptwriter specialising in voiceover narration. The user has an existing voiceover script and wants to refine it. Return exactly ONE improved version.
 
 Rules:
 - Output ONLY the spoken words — nothing else.
 - Do NOT include: scene numbers, timestamps, stage directions, visual descriptions, [brackets], (parentheses), camera notes, or any meta-text.
-- The result must read as a clean monologue that could be spoken directly into a microphone.`
+- The result must read as a clean monologue that could be spoken directly into a microphone.
+- ${targetLine}`
     : `You are a professional video scriptwriter specialising in voiceover narration. Generate exactly 3 different voiceover script variations for the given idea and tone.
 
 Rules:
 - Write ONLY the words that will be spoken aloud by the narrator — nothing else.
 - Do NOT include: scene numbers, timestamps, stage directions, visual descriptions, [brackets], (parentheses), camera notes, or any meta-text whatsoever.
 - Each script must read as a clean, continuous monologue that could be read directly into a microphone.
+- ${targetLine}
 - Separate the three scripts with the exact delimiter: ---SCRIPT_BREAK---
 - Output only the three scripts separated by the delimiter — no preamble, no titles, no labels.`
 

@@ -117,6 +117,10 @@ export interface DbProjectSettings {
   default_video_provider: string | null
   // migration 006 — Skip Video Gen (images-only export mode)
   skip_video_gen: boolean
+  // migration 007 — target video length (Script Length Guard + selector)
+  target_duration_seconds: number
+  // migration 008 — script model override (missing since migration 004)
+  default_script_model: string | null
   created_at: string
   updated_at: string
 }

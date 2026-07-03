@@ -1,4 +1,5 @@
 import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
+import { VIDEO_FORMAT } from '../../../../shared/config/videoFormat'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -13,13 +14,20 @@ export default defineEventHandler(async (event) => {
     default_audio_provider?: string
     default_video_provider?: string
     // model fields
+    default_script_model?: string
     default_image_model?: string
     default_audio_model?: string
     default_video_model?: string
     default_music_model?: string
     timeline_density?: string
     skip_video_gen?: boolean
+    // migration 007 — target video length
+    target_duration_seconds?: number
   }>(event)
+
+  if (body.target_duration_seconds !== undefined) {
+    body.target_duration_seconds = Math.min(body.target_duration_seconds, VIDEO_FORMAT.maxDuration)
+  }
 
   const supabase = await serverSupabaseClient(event)
 

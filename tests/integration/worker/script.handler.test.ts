@@ -104,6 +104,38 @@ describe('script handler', () => {
     expect(callArg.messages[0].content).toContain('Make it shorter')
   })
 
+  it('includes the requested target length in the system prompt', async () => {
+    mockScriptGenerate.mockResolvedValueOnce({ text: THREE_SCRIPTS })
+    const { handleScriptJob } = await import('../../../server/worker/handlers/script')
+    await handleScriptJob({
+      ...BASE_JOB,
+      input: { idea: 'x', tone: 'y', target_duration_seconds: 60 },
+    } as never)
+    const callArg = mockScriptGenerate.mock.calls[0][0]
+    expect(callArg.systemPrompt).toContain('130 words')
+    expect(callArg.systemPrompt).toContain('~60s')
+  })
+
+  it('defaults the target length to 180s when not provided', async () => {
+    mockScriptGenerate.mockResolvedValueOnce({ text: THREE_SCRIPTS })
+    const { handleScriptJob } = await import('../../../server/worker/handlers/script')
+    await handleScriptJob({ ...BASE_JOB, input: { idea: 'x', tone: 'y' } } as never)
+    const callArg = mockScriptGenerate.mock.calls[0][0]
+    expect(callArg.systemPrompt).toContain('~180s')
+  })
+
+  it('clamps a target length above the 180s ceiling', async () => {
+    mockScriptGenerate.mockResolvedValueOnce({ text: THREE_SCRIPTS })
+    const { handleScriptJob } = await import('../../../server/worker/handlers/script')
+    await handleScriptJob({
+      ...BASE_JOB,
+      input: { idea: 'x', tone: 'y', target_duration_seconds: 600 },
+    } as never)
+    const callArg = mockScriptGenerate.mock.calls[0][0]
+    expect(callArg.systemPrompt).toContain('~180s')
+    expect(callArg.systemPrompt).not.toContain('~600s')
+  })
+
   it('propagates error from provider (worker retry loop handles it)', async () => {
     mockScriptGenerate.mockRejectedValueOnce(new Error('API rate limit'))
     const { handleScriptJob } = await import('../../../server/worker/handlers/script')
