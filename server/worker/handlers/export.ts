@@ -46,6 +46,37 @@ async function getLatestSceneVideos(projectId: string, sceneIds: string[]) {
   return videoMap
 }
 
+async function getLatestSceneImages(projectId: string, sceneIds: string[]) {
+  const { data } = await adminSupabase
+    .from('job_outputs')
+    .select('label, storage_url')
+    .eq('project_id', projectId)
+    .eq('type', 'image')
+    .like('label', 'scene_image_%')
+    .not('storage_url', 'is', null)
+    .order('created_at', { ascending: false })
+
+  const wanted = new Set(sceneIds)
+  const imageMap = new Map<string, string>()
+  for (const row of (data ?? []) as OutputRow[]) {
+    const sceneId = row.label?.replace('scene_image_', '') ?? ''
+    if (!sceneId || !wanted.has(sceneId) || imageMap.has(sceneId) || !row.storage_url) continue
+    imageMap.set(sceneId, row.storage_url)
+  }
+  return imageMap
+}
+
+// Skip Video Gen: when enabled, export assembles a slideshow from scene images instead of
+// generated video clips. Toggled on the Video tab and read here at export time.
+async function getSkipVideoGen(projectId: string): Promise<boolean> {
+  const { data } = await adminSupabase
+    .from('project_settings')
+    .select('skip_video_gen')
+    .eq('project_id', projectId)
+    .single()
+  return !!data?.skip_video_gen
+}
+
 // Returns latest per-scene audio URLs (scene_audio_{sceneId}).
 async function getSceneAudioUrls(projectId: string, sceneIds: string[]): Promise<Map<string, string>> {
   const { data } = await adminSupabase
@@ -193,6 +224,22 @@ async function freezeExtendVideo(inputPath: string, extraSeconds: number, output
   ])
 }
 
+// Skip Video Gen: turns a still scene image into a normalized clip held for the scene's
+// full duration. Reuses the freeze-frame tpad extend below — seed a single-frame clip
+// from the image, then hold it exactly like the video-generation freeze-frame failsafe.
+async function imageToVideoClip(imagePath: string, durationSeconds: number, seedPath: string, outputPath: string) {
+  await runFfmpeg([
+    '-y',
+    '-i', imagePath,
+    '-frames:v', '1',
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1',
+    '-r', '30',
+    '-pix_fmt', 'yuv420p',
+    seedPath,
+  ])
+  await freezeExtendVideo(seedPath, durationSeconds, outputPath)
+}
+
 export async function handleExportJob(job: DbJob) {
   console.log(`[export] Job ${job.id} - assembling project ${job.project_id}`)
 
@@ -209,12 +256,19 @@ export async function handleExportJob(job: DbJob) {
 
   const sceneRows = scenes as SceneRow[]
   const sceneIds = sceneRows.map(s => s.id)
-  const videoMap = await getLatestSceneVideos(job.project_id, sceneIds)
-  const missingVideos = sceneRows.filter(scene => !videoMap.has(scene.id))
 
-  if (missingVideos.length) {
+  // Skip Video Gen: assemble from scene images instead of generated video clips.
+  const skipVideoGen = await getSkipVideoGen(job.project_id)
+  const mediaMap = skipVideoGen
+    ? await getLatestSceneImages(job.project_id, sceneIds)
+    : await getLatestSceneVideos(job.project_id, sceneIds)
+  const missingMedia = sceneRows.filter(scene => !mediaMap.has(scene.id))
+
+  if (missingMedia.length) {
     await updateJobStatus(job.id, 'failed', {
-      error_message: `Missing video clips for ${missingVideos.length} scene(s).`,
+      error_message: skipVideoGen
+        ? `Missing images for ${missingMedia.length} scene(s).`
+        : `Missing video clips for ${missingMedia.length} scene(s).`,
     })
     return
   }
@@ -224,14 +278,24 @@ export async function handleExportJob(job: DbJob) {
   try {
     await updateJobStatus(job.id, 'processing', {})
 
-    // Normalize each scene video to consistent 1280x720 @ 30fps
+    // Normalize each scene to a consistent 1280x720 @ 30fps clip — either the generated
+    // video, or (Skip Video Gen) the scene image held for its full scene duration.
     const normalizedPaths: string[] = []
     for (const scene of sceneRows) {
-      const url = videoMap.get(scene.id)!
-      const inputPath = join(tempDir, `scene-${scene.order_index}.${extensionFromUrl(url, 'mp4')}`)
+      const url = mediaMap.get(scene.id)!
       const normalizedPath = join(tempDir, `scene-${scene.order_index}-normalized.mp4`)
-      await downloadToFile(url, inputPath)
-      await normalizeVideo(inputPath, normalizedPath)
+
+      if (skipVideoGen) {
+        const inputPath = join(tempDir, `scene-${scene.order_index}.${extensionFromUrl(url, 'png')}`)
+        const seedPath = join(tempDir, `scene-${scene.order_index}-seed.mp4`)
+        await downloadToFile(url, inputPath)
+        await imageToVideoClip(inputPath, scene.duration ?? 5, seedPath, normalizedPath)
+      } else {
+        const inputPath = join(tempDir, `scene-${scene.order_index}.${extensionFromUrl(url, 'mp4')}`)
+        await downloadToFile(url, inputPath)
+        await normalizeVideo(inputPath, normalizedPath)
+      }
+
       normalizedPaths.push(normalizedPath)
     }
 
@@ -288,6 +352,7 @@ export async function handleExportJob(job: DbJob) {
       version: 2,
       project_id: job.project_id,
       exported_at: new Date().toISOString(),
+      mode: skipVideoGen ? 'images_only' : 'video',
       total_duration_seconds: totalDuration,
       has_audio: !!audioFilePath,
       output_url: storageUrl,
@@ -299,7 +364,8 @@ export async function handleExportJob(job: DbJob) {
         start_time: scene.start_time,
         end_time: scene.end_time,
         duration: scene.duration,
-        video_url: videoMap.get(scene.id) ?? null,
+        video_url: skipVideoGen ? null : mediaMap.get(scene.id) ?? null,
+        image_url: skipVideoGen ? mediaMap.get(scene.id) ?? null : null,
       })),
     }
 
@@ -341,6 +407,7 @@ export async function handleExportJob(job: DbJob) {
         has_audio: !!audioFilePath,
         storage_url: storageUrl,
         total_duration_seconds: totalDuration,
+        mode: skipVideoGen ? 'images_only' : 'video',
       },
     })
 

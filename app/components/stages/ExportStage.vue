@@ -23,7 +23,7 @@
 
     <div class="flex items-center gap-4 flex-wrap">
       <button
-        :disabled="isRunning || !scenes.length || videoCount === 0"
+        :disabled="isRunning || !scenes.length || mediaReadyCount === 0"
         class="px-6 py-2.5 bg-white text-gray-950 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors disabled:opacity-40"
         @click="startExport"
       >
@@ -33,6 +33,13 @@
         </span>
         <span v-else>{{ latestExport ? 'Re-export MP4' : 'Export MP4' }}</span>
       </button>
+
+      <span
+        v-if="skipVideoGen"
+        class="text-xs px-2.5 py-1 rounded-full border border-white/10 text-gray-500"
+      >
+        Skip Video Gen enabled — exporting a slideshow from scene images
+      </span>
 
       <p v-if="isFailed" class="text-sm text-red-400">
         {{ job?.error_message ?? 'Export failed.' }}
@@ -102,6 +109,7 @@
 <script setup lang="ts">
 const props = defineProps<{ projectId: string }>()
 
+const projectStore = useProjectStore()
 const { scenes, fetchScenes } = useScenes(toRef(props, 'projectId'))
 const { job, isRunning, isFailed, isDone, startJob } = useJobPoller()
 
@@ -118,9 +126,15 @@ const latestExport = computed(() => exports.value[0] ?? null)
 const manifest = ref<Record<string, unknown> | null>(null)
 const audioUrl = ref<string | null>(null)
 const sceneVideos = ref<Map<string, string>>(new Map())
+const sceneImages = ref<Map<string, string>>(new Map())
 const exportPreviewUrl = ref<string | null>(null)
 
+// Skip Video Gen (toggled on the Video tab) makes export build a slideshow from scene
+// images instead of generated video clips, so readiness must track images in that mode.
+const skipVideoGen = computed(() => projectStore.settings?.skip_video_gen ?? false)
 const videoCount = computed(() => scenes.value.filter(scene => sceneVideos.value.has(scene.id)).length)
+const imageCount = computed(() => scenes.value.filter(scene => sceneImages.value.has(scene.id)).length)
+const mediaReadyCount = computed(() => skipVideoGen.value ? imageCount.value : videoCount.value)
 const totalDuration = computed(() => scenes.value.reduce((s, sc) => s + (sc.duration ?? 0), 0))
 
 onMounted(async () => {
@@ -144,12 +158,14 @@ async function loadExports() {
 }
 
 async function loadCurrentMedia() {
-  const [audio, videos] = await Promise.all([
+  const [audio, videos, images] = await Promise.all([
     $fetch<{ url: string } | null>('/api/audio', { query: { projectId: props.projectId } }),
     $fetch<{ sceneId: string; url: string }[]>('/api/videos', { query: { projectId: props.projectId } }),
+    $fetch<{ sceneId: string; url: string }[]>('/api/images', { query: { projectId: props.projectId } }),
   ])
   audioUrl.value = audio?.url ?? null
   sceneVideos.value = new Map(videos.map(v => [v.sceneId, v.url]))
+  sceneImages.value = new Map(images.map(i => [i.sceneId, i.url]))
 }
 
 async function startExport() {
@@ -182,9 +198,9 @@ const stats = computed(() => [
   },
   { label: 'Audio', value: audioUrl.value ? 'Yes' : 'No', ready: !!audioUrl.value },
   {
-    label: 'Videos',
-    value: scenes.value.length ? `${videoCount.value} / ${scenes.value.length}` : '-',
-    ready: scenes.value.length > 0 && videoCount.value === scenes.value.length,
+    label: skipVideoGen.value ? 'Images' : 'Videos',
+    value: scenes.value.length ? `${mediaReadyCount.value} / ${scenes.value.length}` : '-',
+    ready: scenes.value.length > 0 && mediaReadyCount.value === scenes.value.length,
   },
 ])
 
@@ -192,9 +208,9 @@ const assetChecklist = computed(() => [
   { label: 'Script', ready: scenes.value.length > 0, detail: `${scenes.value.length} scenes` },
   { label: 'Audio track', ready: !!audioUrl.value, detail: null },
   {
-    label: 'Video clips',
-    ready: scenes.value.length > 0 && videoCount.value === scenes.value.length,
-    detail: videoCount.value ? `${videoCount.value} clips` : null,
+    label: skipVideoGen.value ? 'Scene images' : 'Video clips',
+    ready: scenes.value.length > 0 && mediaReadyCount.value === scenes.value.length,
+    detail: mediaReadyCount.value ? `${mediaReadyCount.value} ${skipVideoGen.value ? 'images' : 'clips'}` : null,
   },
   { label: 'MP4 file', ready: !!latestExport.value?.storage_url, detail: null },
 ])

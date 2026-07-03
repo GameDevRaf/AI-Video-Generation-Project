@@ -37,11 +37,19 @@ export const useProjectStore = defineStore('project', () => {
 
   async function updateSettings(partial: Partial<DbProjectSettings>) {
     if (!currentProject.value) return
+    const previous = settings.value ? { ...settings.value } : null
     if (settings.value) Object.assign(settings.value, partial)
-    await $fetch(`/api/projects/${currentProject.value.id}/settings`, {
-      method: 'PATCH',
-      body: partial,
-    })
+    try {
+      await $fetch(`/api/projects/${currentProject.value.id}/settings`, {
+        method: 'PATCH',
+        body: partial,
+      })
+    } catch (e) {
+      // Roll back the optimistic update so the UI doesn't drift out of sync with the
+      // database when the write fails (e.g. a column the client expects doesn't exist yet).
+      if (settings.value && previous) Object.assign(settings.value, previous)
+      throw e
+    }
   }
 
   function reset() {

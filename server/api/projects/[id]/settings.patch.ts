@@ -1,4 +1,4 @@
-﻿import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
+import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -18,6 +18,7 @@ export default defineEventHandler(async (event) => {
     default_video_model?: string
     default_music_model?: string
     timeline_density?: string
+    skip_video_gen?: boolean
   }>(event)
 
   const supabase = await serverSupabaseClient(event)
@@ -34,7 +35,10 @@ export default defineEventHandler(async (event) => {
 
   const { data, error } = await supabase
     .from('project_settings')
-    .upsert({ project_id: projectId, ...body, updated_at: new Date().toISOString() })
+    .upsert(
+      { project_id: projectId, ...body, updated_at: new Date().toISOString() },
+      { onConflict: 'project_id' },
+    )
     .select()
     .single()
 

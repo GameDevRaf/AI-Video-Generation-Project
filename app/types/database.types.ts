@@ -115,6 +115,8 @@ export interface DbProjectSettings {
   default_image_provider: string | null
   default_audio_provider: string | null
   default_video_provider: string | null
+  // migration 006 — Skip Video Gen (images-only export mode)
+  skip_video_gen: boolean
   created_at: string
   updated_at: string
 }

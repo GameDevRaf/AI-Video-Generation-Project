@@ -34,8 +34,29 @@
         <span v-else>{{ videoStage.hasAnyVideo.value ? 'Regenerate all videos' : 'Generate all videos' }}</span>
       </button>
 
-      <p v-if="promptsError || videosError" class="text-sm text-amber-400/80">
-        {{ promptsError ?? videosError }}
+      <!-- Skip Video Gen — export a slideshow of scene images instead of generated video clips -->
+      <button
+        type="button"
+        role="switch"
+        :aria-checked="skipVideoGen"
+        class="ml-auto flex items-center gap-2 px-3 py-2 rounded-lg border border-white/15 text-sm font-medium transition-colors"
+        :class="skipVideoGen ? 'bg-white/10 text-white' : 'text-gray-300 hover:bg-white/5'"
+        @click="toggleSkipVideoGen"
+      >
+        <span
+          class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors"
+          :class="skipVideoGen ? 'bg-white' : 'bg-white/15'"
+        >
+          <span
+            class="inline-block h-3.5 w-3.5 transform rounded-full bg-gray-950 transition-transform"
+            :class="skipVideoGen ? 'translate-x-4' : 'translate-x-1'"
+          />
+        </span>
+        Skip Video Gen
+      </button>
+
+      <p v-if="promptsError || videosError || skipVideoGenError" class="text-sm text-amber-400/80 basis-full">
+        {{ promptsError ?? videosError ?? skipVideoGenError }}
       </p>
     </div>
 
@@ -143,6 +164,18 @@ const uploadingSceneId = ref<string | null>(null)
 const providerError = ref<string | undefined>(undefined)
 const previewSceneId = ref<string | null>(null)
 const dataLoaded = ref(false)
+
+const skipVideoGen = computed(() => projectStore.settings?.skip_video_gen ?? false)
+const skipVideoGenError = ref<string | undefined>(undefined)
+
+async function toggleSkipVideoGen() {
+  skipVideoGenError.value = undefined
+  try {
+    await projectStore.updateSettings({ skip_video_gen: !skipVideoGen.value })
+  } catch {
+    skipVideoGenError.value = 'Failed to save Skip Video Gen — please try again.'
+  }
+}
 
 onMounted(async () => {
   await fetchScenes()
