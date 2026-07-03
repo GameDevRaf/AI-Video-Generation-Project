@@ -1,0 +1,70 @@
+:root {
+  --ncm-code-bg: #f8fafc;
+  --ncm-code-bg-hover: #eef2ff;
+  --ncm-border: 1px solid #cbd5e1;
+  --ncm-text: #0f172a;
+  --ncm-text-muted: #334155;
+  --ncm-text-xmuted: #64748b;
+  --ncm-overlay-bg: rgba(248, 250, 252, 0.98);
+  --mermaid-label-bg: rgba(226, 232, 240, 0.82);
+  --mermaid-label-border: rgba(100, 116, 139, 0.45);
+  --mermaid-label-text: #0f172a;
+}
+
+.dark {
+  --ncm-code-bg: #020617;
+  --ncm-code-bg-hover: #111827;
+  --ncm-border: 1px solid #334155;
+  --ncm-text: #f8fafc;
+  --ncm-text-muted: #cbd5e1;
+  --ncm-text-xmuted: #94a3b8;
+  --ncm-overlay-bg: rgba(2, 6, 23, 0.98);
+  --mermaid-label-bg: rgba(51, 65, 85, 0.62);
+  --mermaid-label-border: rgba(148, 163, 184, 0.34);
+  --mermaid-label-text: #f8fafc;
+}
+
+svg[id^="mermaid-"] {
+  overflow: visible;
+}
+
+svg[id^="mermaid-"] .edgeLabel,
+svg[id^="mermaid-"] .edgeLabel p,
+svg[id^="mermaid-"] .edgeLabel span {
+  background: transparent !important;
+  color: var(--mermaid-label-text) !important;
+  line-height: 1.35 !important;
+}
+
+svg[id^="mermaid-"] .labelBkg,
+svg[id^="mermaid-"] .edgeLabel rect {
+  fill: var(--mermaid-label-bg) !important;
+  stroke: var(--mermaid-label-border) !important;
+  stroke-width: 1px !important;
+  rx: 4px;
+  ry: 4px;
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scaleX(1.14) scaleY(1.08);
+}
+
+svg[id^="mermaid-"] .edgeLabel foreignObject {
+  overflow: visible;
+}
+
+svg[id^="mermaid-"] .cluster-label,
+svg[id^="mermaid-"] .cluster-label p,
+svg[id^="mermaid-"] .cluster-label span {
+  background: transparent !important;
+  color: var(--mermaid-label-text) !important;
+  line-height: 1.35 !important;
+}
+
+svg[id^="mermaid-"] .cluster-label foreignObject {
+  overflow: visible;
+}
+
+svg[id^="mermaid-"] .cluster rect {
+  rx: 5px;
+  ry: 5px;
+}

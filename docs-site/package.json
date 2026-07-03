@@ -1,0 +1,19 @@
+{
+  "name": "ai-video-generation-docs",
+  "private": true,
+  "description": "Docus documentation site for the AI Video Generation Project.",
+  "scripts": {
+    "dev": "nuxi dev --port 3001",
+    "build": "node --max-old-space-size=4096 ./node_modules/@nuxt/cli/bin/nuxi.mjs build",
+    "generate": "node --max-old-space-size=4096 ./node_modules/@nuxt/cli/bin/nuxi.mjs generate",
+    "preview": "nuxi preview --port 3001"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "docus": "latest",
+    "nuxt": "^4.4.8"
+  },
+  "devDependencies": {
+    "@barzhsieh/nuxt-content-mermaid": "^2.2.3"
+  }
+}
