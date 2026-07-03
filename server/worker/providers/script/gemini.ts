@@ -7,6 +7,11 @@ import type { ScriptProvider, ScriptParams, ScriptResult } from '../types'
 // budget and the answer is truncated mid-sentence. Give thinking its OWN budget
 // on top of the caller's requested output so it can never starve the response.
 const THINKING_BUDGET = 2048
+const GEMMA_MODEL_PREFIX = 'gemma-'
+
+function supportsThinkingBudget(model: string): boolean {
+  return !model.toLowerCase().startsWith(GEMMA_MODEL_PREFIX)
+}
 
 export class GeminiScriptProvider implements ScriptProvider {
   readonly providerId = 'gemini'
@@ -28,15 +33,21 @@ export class GeminiScriptProvider implements ScriptProvider {
     })
 
     const outputBudget = params.maxTokens ?? 4096
+    const config: Record<string, unknown> = {
+      systemInstruction: params.systemPrompt,
+      maxOutputTokens: outputBudget,
+    }
+
+    if (supportsThinkingBudget(params.model)) {
+      // Reserve room for thinking so it does not consume the caller's output budget.
+      config.maxOutputTokens = outputBudget + THINKING_BUDGET
+      config.thinkingConfig = { thinkingBudget: THINKING_BUDGET }
+    }
+
     const res = await ai.models.generateContent({
       model: params.model,
       contents,
-      config: {
-        systemInstruction: params.systemPrompt,
-        // Reserve room for thinking so it does not consume the caller's output budget.
-        maxOutputTokens: outputBudget + THINKING_BUDGET,
-        thinkingConfig: { thinkingBudget: THINKING_BUDGET },
-      },
+      config,
     })
 
     return { text: res.text ?? '' }

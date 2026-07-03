@@ -13,11 +13,11 @@ interface SceneData {
 }
 
 export async function handleSceneSplitJob(job: DbJob) {
-  const input = job.input as { script_text: string }
+  const input = job.input as { script_text: string; provider?: string; model?: string }
 
-  const providerId = await resolveScriptProvider(job)
+  const providerId = await resolveScriptProvider(job, input.provider)
   const meta = getCatalogEntry(providerId)
-  const model = job.model ?? meta?.defaultModel ?? 'claude-sonnet-4-6'
+  const model = input.model ?? job.model ?? meta?.defaultModel ?? 'claude-sonnet-4-6'
 
   const apiKey = await getProviderKey(providerId, job.user_id)
   const provider = providerRegistry.script(providerId)

@@ -22,6 +22,36 @@ const scene = {
 }
 
 describe('stage scene cards', () => {
+  it('shows the same rounded scene duration in the image and video cards', () => {
+    const fractionalScene = { ...scene, duration: 5.6 }
+
+    const imageWrapper = mount(ImageSceneCard, {
+      props: {
+        scene: fractionalScene,
+        prompt: 'wide cinematic shot',
+        hasPrompt: true,
+        imageUrl: 'https://cdn.test/scene.png',
+        generating: false,
+        generatingPrompt: false,
+      },
+    })
+
+    const videoWrapper = mount(VideoSceneCard, {
+      props: {
+        scene: fractionalScene,
+        prompt: 'slow dolly in',
+        videoUrl: 'https://cdn.test/scene.mp4',
+        imageUrl: null,
+        isActive: true,
+        generating: false,
+        generatingPrompt: false,
+      },
+    })
+
+    expect(imageWrapper.text()).toContain('6s')
+    expect(videoWrapper.text()).toContain('6s')
+  })
+
   it('emits the scene id when image prompt regeneration is clicked', async () => {
     const wrapper = mount(ImageSceneCard, {
       props: {

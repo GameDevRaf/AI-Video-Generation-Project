@@ -73,6 +73,33 @@ describe('image prompt handler', () => {
     })
   })
 
+  it('retries transient provider internal errors when generating prompts for all scenes', async () => {
+    vi.useFakeTimers()
+    try {
+      mockScriptGenerate
+        .mockRejectedValueOnce(new Error('{"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}'))
+        .mockResolvedValueOnce({
+          text: JSON.stringify([
+            { scene_id: 'scene-1', prompt: 'first prompt' },
+            { scene_id: 'scene-2', prompt: 'second prompt' },
+          ]),
+        })
+
+      const { handleImagePromptJob } = await import('../../../server/worker/handlers/image_prompt')
+      const run = handleImagePromptJob({ ...BASE_JOB, input: {} } as never)
+      await vi.runAllTimersAsync()
+      await run
+
+      expect(mockScriptGenerate).toHaveBeenCalledTimes(2)
+      expect(mockStoreTextOutput.mock.calls.map(call => [call[1], call[2]])).toEqual([
+        ['first prompt', 'image_prompt_scene_scene-1'],
+        ['second prompt', 'image_prompt_scene_scene-2'],
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it.each(['anthropic', 'openai', 'gemini', 'groq', 'mistral'])(
     'uses selected script provider %s when regenerating one scene',
     async (provider) => {
@@ -101,6 +128,23 @@ describe('image prompt handler', () => {
       expect(providerInput).not.toContain('scene-1')
     },
   )
+
+  it('prefers input.provider/input.model over the job-level defaults (Script tab selection)', async () => {
+    mockScriptGenerate.mockResolvedValueOnce({
+      text: JSON.stringify([{ scene_id: 'scene-2', prompt: 'img' }]),
+    })
+
+    const { handleImagePromptJob } = await import('../../../server/worker/handlers/image_prompt')
+    await handleImagePromptJob({
+      ...BASE_JOB,
+      provider: 'anthropic',
+      input: { scene_id: 'scene-2', provider: 'gemini', model: 'gemini-3-flash' },
+    } as never)
+
+    expect(mockRegistryScript).toHaveBeenCalledWith('gemini')
+    expect(mockGetProviderKey).toHaveBeenCalledWith('gemini', 'user-1')
+    expect(mockScriptGenerate.mock.calls[0][0].model).toBe('gemini-3-flash')
+  })
 
   it('ensures visual descriptions first and builds the prompt from them (not raw script_text)', async () => {
     mockScriptGenerate.mockResolvedValueOnce({

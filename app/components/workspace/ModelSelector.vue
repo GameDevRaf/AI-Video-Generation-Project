@@ -164,8 +164,8 @@ const selectedModelId = ref(
 // Also emits providerChanged so generate() functions read the correct provider
 // from projectStore.settings rather than a stale default.
 watch(
-  [() => props.stage, () => props.initialProviderId, () => props.savedProviderIds],
-  ([, newInitialId]) => {
+  [() => props.stage, () => props.initialProviderId, () => props.initialModelId, () => props.savedProviderIds],
+  ([, newInitialId, newInitialModelId]) => {
     let id: string
     if (newInitialId) {
       id = newInitialId
@@ -173,8 +173,8 @@ watch(
       const firstWithKey = providers.value.find(p => props.savedProviderIds.includes(p.keyProviderId ?? p.id))
       id = firstWithKey?.id ?? DEFAULTS[props.stage] ?? 'anthropic'
     }
-    const model = (newInitialId && props.initialModelId)
-      ? props.initialModelId
+    const model = (newInitialId && newInitialModelId)
+      ? newInitialModelId
       : PROVIDER_CATALOG.find(p => p.id === id)?.defaultModel ?? ''
 
     selectedProviderId.value = id

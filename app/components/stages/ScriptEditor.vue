@@ -113,7 +113,7 @@ const { job, isRunning, error: pollerError, startJob } = useJobPoller()
 const wordCount = computed(() => countWords(text.value))
 
 const targetSeconds = computed(() =>
-  Math.min(projectStore.settings?.target_duration_seconds ?? 180, VIDEO_FORMAT.maxDuration),
+  Math.min(projectStore.settings?.target_duration_seconds ?? 30, VIDEO_FORMAT.maxDuration),
 )
 // Matches the preset button labels in ScriptStage.vue exactly (15s/30s/60s/90s/3m) —
 // only the 3-minute ceiling itself uses the "m" form.

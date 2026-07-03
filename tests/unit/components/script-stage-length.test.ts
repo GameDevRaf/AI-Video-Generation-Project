@@ -96,4 +96,16 @@ describe('ScriptStage — target length selector', () => {
     const body = jobPostCall![1] as { body: { input: { target_duration_seconds: number } } }
     expect(body.body.input.target_duration_seconds).toBe(60)
   })
+
+  it('defaults to the 30s preset for a new project with no saved settings', async () => {
+    const projectStore = useProjectStore()
+    projectStore.currentProject = makeProject()
+    projectStore.settings = null
+
+    const wrapper = mount(ScriptStage, { props: { projectId: 'p1' } })
+    await vi.advanceTimersByTimeAsync(0)
+
+    const findPreset = (label: string) => wrapper.findAll('button').find(b => b.text() === label)!
+    expect(findPreset('30s').classes()).toContain('bg-white')
+  })
 })

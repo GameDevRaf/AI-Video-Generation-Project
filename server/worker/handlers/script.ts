@@ -1,21 +1,11 @@
 import { getProviderKey } from '../lib/getProviderKey'
-import { adminSupabase } from '../lib/supabase'
 import { providerRegistry } from '../providers/registry'
 import { getCatalogEntry } from '../providers/catalog'
 import { updateJobStatus, storeTextOutput } from '../lib/jobs'
+import { resolveScriptProvider } from '../lib/scriptProvider'
 import { VIDEO_FORMAT } from '../../../shared/config/videoFormat'
 import { targetWordCount } from '../../../shared/utils/scriptLength'
 import type { DbJob } from '../../../app/types/database.types'
-
-async function resolveScriptProvider(job: DbJob, inputProvider?: string): Promise<string> {
-  if (inputProvider || job.provider) return inputProvider ?? job.provider!
-  const { data } = await adminSupabase
-    .from('user_settings')
-    .select('default_script_provider')
-    .eq('user_id', job.user_id)
-    .single()
-  return data?.default_script_provider ?? 'anthropic'
-}
 
 export async function handleScriptJob(job: DbJob) {
   const input = job.input as {

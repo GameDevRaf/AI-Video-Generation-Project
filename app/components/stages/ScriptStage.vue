@@ -159,7 +159,7 @@ const selectedScript = ref<DbJobOutput | null>(null)
 const targetDurationError = ref<string | undefined>(undefined)
 
 const targetDuration = computed(() =>
-  Math.min(projectStore.settings?.target_duration_seconds ?? 180, VIDEO_FORMAT.maxDuration),
+  Math.min(projectStore.settings?.target_duration_seconds ?? 30, VIDEO_FORMAT.maxDuration),
 )
 
 async function setTargetDuration(seconds: number) {

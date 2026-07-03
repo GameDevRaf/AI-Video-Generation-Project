@@ -52,4 +52,17 @@ describe('GeminiScriptProvider', () => {
     expect(config.thinkingConfig.thinkingBudget).toBeGreaterThan(0)
     expect(config.maxOutputTokens).toBe(1024 + config.thinkingConfig.thinkingBudget)
   })
+
+  it('omits thinking config for Gemma models that do not support it', async () => {
+    mockGenerateContent.mockResolvedValueOnce({ text: 'ok' })
+    const { GeminiScriptProvider } = await import('../../../server/worker/providers/script/gemini')
+    await new GeminiScriptProvider().generate({
+      job: {} as never, apiKey: 'k', model: 'gemma-4-31b-it',
+      messages: [{ role: 'user', content: 'Write the motion prompt' }],
+      maxTokens: 1024,
+    })
+    const config = mockGenerateContent.mock.calls[0][0].config
+    expect(config.maxOutputTokens).toBe(1024)
+    expect(config.thinkingConfig).toBeUndefined()
+  })
 })

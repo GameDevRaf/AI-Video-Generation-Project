@@ -6,15 +6,58 @@ import { updateJobStatus, storeTextOutput } from '../lib/jobs'
 import { resolveScriptProvider } from '../lib/scriptProvider'
 import { ensureVisualDescriptions } from '../lib/visualDescriptions'
 import type { DbJob } from '../../../app/types/database.types'
-import type { ScriptImage } from '../providers/types'
+import type { ScriptImage, ScriptProvider } from '../providers/types'
 
 // Script providers whose adapters render attached images (see providers/script/*).
 const VISION_CAPABLE = new Set(['anthropic', 'openai', 'gemini'])
+const MAX_PROVIDER_ATTEMPTS = 3
+const RETRY_DELAY_MS = 1_000
 
 function systemPrompt(anchor: string): string {
-  return `You are a video director. You are given a scene's visual description and, when available, its first-frame image. Write a concise motion prompt (under 80 words) describing how this shot animates FROM that first frame: subject action, camera movement and pacing. Keep it consistent with the shared visual style. Describe motion only — do not restate the scene in full or the narration. Return ONLY the prompt text: no labels, no quotes, no JSON.
+  return `You are a video director. You are given a scene's visual description and, when available, its first-frame image. Write a concise motion prompt (under 80 words) describing how this shot animates FROM that first frame: subject action, camera movement and pacing. Keep it consistent with the shared visual style. Describe motion only - do not restate the scene in full or the narration. Return ONLY the prompt text: no labels, no quotes, no JSON.
 
 Shared visual style: ${anchor || '(none provided)'}`
+}
+
+function buildUserText(description: string, durationSeconds: number | null, hasImage: boolean): string {
+  return [
+    `Visual description: ${description}`,
+    `Target shot length: ~${durationSeconds ?? 5}s.`,
+    hasImage ? 'The attached image is this scene\'s first frame - animate from it.' : '',
+    'Write the motion prompt.',
+  ].filter(Boolean).join('\n')
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isRetryableProviderError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err)
+  return /"status":"INTERNAL"/i.test(message)
+    || /"code":500/i.test(message)
+    || /Internal error encountered\./i.test(message)
+}
+
+async function generateWithRetries(
+  provider: ScriptProvider,
+  params: Parameters<ScriptProvider['generate']>[0],
+): Promise<string> {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= MAX_PROVIDER_ATTEMPTS; attempt++) {
+    try {
+      const res = await provider.generate(params)
+      return res.text
+    } catch (err) {
+      lastError = err
+      const shouldRetry = attempt < MAX_PROVIDER_ATTEMPTS && isRetryableProviderError(err)
+      if (!shouldRetry) throw err
+      await sleep(RETRY_DELAY_MS * attempt)
+    }
+  }
+
+  throw lastError
 }
 
 /** Newest generated first-frame image URL per requested scene (label `scene_image_{id}`). */
@@ -51,7 +94,7 @@ async function fetchImage(url: string): Promise<ScriptImage | null> {
 }
 
 export async function handleVideoPromptJob(job: DbJob) {
-  const input = (job.input ?? {}) as { scene_id?: string }
+  const input = (job.input ?? {}) as { scene_id?: string; provider?: string; model?: string }
 
   const { data: allScenes } = await adminSupabase
     .from('scenes')
@@ -61,9 +104,9 @@ export async function handleVideoPromptJob(job: DbJob) {
 
   if (!allScenes?.length) throw new Error('No scenes found')
 
-  const providerId = await resolveScriptProvider(job)
+  const providerId = await resolveScriptProvider(job, input.provider)
   const meta = getCatalogEntry(providerId)
-  const model = job.model ?? meta?.defaultModel ?? 'claude-sonnet-4-6'
+  const model = input.model ?? job.model ?? meta?.defaultModel ?? 'claude-sonnet-4-6'
   const apiKey = await getProviderKey(providerId, job.user_id)
 
   // Establish (or reuse) the cohesive visual descriptions before writing motion prompts.
@@ -90,33 +133,24 @@ export async function handleVideoPromptJob(job: DbJob) {
     const imageUrl = imageUrls.get(scene.id)
     const image = imageUrl ? await fetchImage(imageUrl) : null
 
-    const userText = [
-      `Visual description: ${description}`,
-      `Target shot length: ~${scene.duration ?? 5}s.`,
-      image ? 'The attached image is this scene\'s first frame — animate from it.' : '',
-      'Write the motion prompt.',
-    ].filter(Boolean).join('\n')
-
     let text: string
     try {
-      const res = await provider.generate({
+      text = await generateWithRetries(provider, {
         job, apiKey, model,
         systemPrompt: sys,
-        messages: [{ role: 'user', content: userText }],
+        messages: [{ role: 'user', content: buildUserText(description, scene.duration, Boolean(image)) }],
         images: image ? [image] : undefined,
         maxTokens: 1024,
       })
-      text = res.text
     } catch (err) {
-      // Vision call failed — retry once without the image (graceful text-only fallback).
+      // Vision call failed - retry once without the image (graceful text-only fallback).
       if (!image) throw err
-      const res = await provider.generate({
+      text = await generateWithRetries(provider, {
         job, apiKey, model,
         systemPrompt: sys,
-        messages: [{ role: 'user', content: userText }],
+        messages: [{ role: 'user', content: buildUserText(description, scene.duration, false) }],
         maxTokens: 1024,
       })
-      text = res.text
     }
 
     await storeTextOutput(job, text.trim(), `video_prompt_scene_${scene.id}`)

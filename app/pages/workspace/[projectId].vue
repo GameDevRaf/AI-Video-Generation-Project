@@ -16,6 +16,7 @@
           :stage="activeTab"
           :saved-provider-ids="savedProviderIds"
           :initial-provider-id="currentProviderId"
+          :initial-model-id="currentModelId"
           @provider-changed="onProviderChanged"
           @open-key-panel="providerPanelOpen = true"
         />
@@ -161,6 +162,11 @@ const currentProviderId = computed(() => {
   return field
     ? (projectSettings.value as Record<string, string | null> | null)?.[field] ?? undefined
     : undefined
+})
+
+const currentModelId = computed(() => {
+  const field = `default_${activeTab.value}_model`
+  return (projectSettings.value as Record<string, string | null> | null)?.[field] ?? undefined
 })
 
 async function onProviderChanged(providerId: string, modelId: string) {

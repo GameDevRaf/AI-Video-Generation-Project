@@ -233,6 +233,20 @@ describe('export handler — freeze-frame failsafe', () => {
       error_message: expect.stringContaining('Missing video'),
     }))
   })
+
+  it('normalizes generated scene videos to the shared 1080x1920 vertical format', async () => {
+    setupFromMock({ perSceneAudio: MOCK_PER_SCENE_AUDIO, skipVideoGen: false })
+    const { handleExportJob } = await import('../../../server/worker/handlers/export')
+    await handleExportJob(BASE_JOB as never)
+
+    const normalizeCalls = mockRunFfmpeg.mock.calls.filter((args: string[][]) =>
+      args[0]?.includes('scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1'),
+    )
+    expect(normalizeCalls).toHaveLength(2)
+    for (const [args] of normalizeCalls) {
+      expect(args).toContain('scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1')
+    }
+  })
 })
 
 describe('export handler — Skip Video Gen (images-only)', () => {
@@ -266,6 +280,9 @@ describe('export handler — Skip Video Gen (images-only)', () => {
     // Each image is seeded to a single-frame clip...
     const seedCalls = mockRunFfmpeg.mock.calls.filter((args: string[][]) => args[0]?.includes('-frames:v'))
     expect(seedCalls).toHaveLength(2)
+    for (const [args] of seedCalls) {
+      expect(args).toContain('scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1')
+    }
 
     // ...then held for the scene's full duration (5s, from MOCK_SCENES) via the same
     // tpad freeze-frame extend used for the video-generation failsafe.

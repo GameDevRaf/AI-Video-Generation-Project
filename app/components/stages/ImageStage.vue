@@ -158,12 +158,23 @@ watch(imageJob, async (j) => {
 })
 
 async function generateAllPrompts() {
-  await startPromptsJob(props.projectId, 'image_prompt', {})
+  const provider = projectStore.settings?.default_script_provider ?? undefined
+  const model = projectStore.settings?.default_script_model ?? undefined
+  await startPromptsJob(props.projectId, 'image_prompt', {
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+  })
 }
 
 async function generateSinglePrompt(sceneId: string) {
   regeneratingPromptSceneId.value = sceneId
-  await startSinglePromptJob(props.projectId, 'image_prompt', { scene_id: sceneId })
+  const provider = projectStore.settings?.default_script_provider ?? undefined
+  const model = projectStore.settings?.default_script_model ?? undefined
+  await startSinglePromptJob(props.projectId, 'image_prompt', {
+    scene_id: sceneId,
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+  })
 }
 
 async function generateImage(sceneId: string, prompt: string) {

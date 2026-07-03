@@ -25,6 +25,8 @@ Stack: Nuxt 4, Vue 3, TypeScript, Pinia, Tailwind v4, Supabase, ffmpeg, Vitest, 
    - Check whether normal text documentation needs updates.
    - Check whether diagrams need updates.
    - Use the relevant documentation guide before editing docs.
+   - For routine docs edits, run `cd docs-site && npm run check`.
+   - Run `cd docs-site && npm run generate` only occasionally for larger docs-site changes or when full static docs validation is specifically needed.
 6. Ask before creating commits or pushing.
 
 ## Useful Commands
@@ -40,6 +42,7 @@ npm run test:e2e            # Playwright E2E
 npx nuxi typecheck          # full Nuxt typecheck
 
 cd docs-site && npm run dev       # docs + MCP -> http://localhost:3001
+cd docs-site && npm run check     # fast docs preflight
 cd docs-site && npm run generate  # build/prerender docs
 ```
 

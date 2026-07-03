@@ -10,6 +10,7 @@ import {
   runFfmpeg,
 } from '../../utils/ffmpeg'
 import type { DbJob } from '../../../app/types/database.types'
+import { VIDEO_FORMAT } from '../../../shared/config/videoFormat'
 
 interface SceneRow {
   id: string
@@ -25,6 +26,8 @@ interface OutputRow {
   label: string | null
   storage_url: string | null
 }
+
+const NORMALIZE_FILTER = `scale=${VIDEO_FORMAT.width}:${VIDEO_FORMAT.height}:force_original_aspect_ratio=decrease,pad=${VIDEO_FORMAT.width}:${VIDEO_FORMAT.height}:(ow-iw)/2:(oh-ih)/2,setsar=1`
 
 async function getLatestSceneVideos(projectId: string, sceneIds: string[]) {
   const { data } = await adminSupabase
@@ -165,7 +168,7 @@ async function normalizeVideo(inputPath: string, outputPath: string) {
     '-i', inputPath,
     '-map', '0:v:0',
     '-an',
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1',
+    '-vf', NORMALIZE_FILTER,
     '-r', '30',
     '-c:v', 'libx264',
     '-preset', 'veryfast',
@@ -232,7 +235,7 @@ async function imageToVideoClip(imagePath: string, durationSeconds: number, seed
     '-y',
     '-i', imagePath,
     '-frames:v', '1',
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1',
+    '-vf', NORMALIZE_FILTER,
     '-r', '30',
     '-pix_fmt', 'yuv420p',
     seedPath,
@@ -278,7 +281,7 @@ export async function handleExportJob(job: DbJob) {
   try {
     await updateJobStatus(job.id, 'processing', {})
 
-    // Normalize each scene to a consistent 1280x720 @ 30fps clip — either the generated
+    // Normalize each scene to a consistent 1080x1920 @ 30fps clip — either the generated
     // video, or (Skip Video Gen) the scene image held for its full scene duration.
     const normalizedPaths: string[] = []
     for (const scene of sceneRows) {

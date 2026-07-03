@@ -72,6 +72,7 @@
 const props = defineProps<{ projectId: string; scriptText: string }>()
 defineEmits<{ done: [] }>()
 
+const projectStore = useProjectStore()
 const { job, isRunning, isFailed, error: pollerError, startJob } = useJobPoller()
 const {
   scenes, loading: scenesLoading, totalDuration,
@@ -103,7 +104,13 @@ watch(job, async (j) => {
 })
 
 async function splitScenes() {
-  await startJob(props.projectId, 'scene_split', { script_text: props.scriptText })
+  const provider = projectStore.settings?.default_script_provider ?? undefined
+  const model = projectStore.settings?.default_script_model ?? undefined
+  await startJob(props.projectId, 'scene_split', {
+    script_text: props.scriptText,
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+  })
 }
 
 function formatTime(seconds: number): string {

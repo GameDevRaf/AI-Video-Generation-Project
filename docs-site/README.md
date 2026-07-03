@@ -8,6 +8,7 @@ It runs separately from the main Nuxt app so the documentation theme, Nuxt Conte
 
 ```bash
 npm install
+npm run check
 npm run dev
 ```
 
@@ -17,6 +18,8 @@ The local documentation site runs at `http://localhost:3001`.
 npm run generate
 npm run preview
 ```
+
+`npm run check` is the fast documentation preflight. It validates frontmatter, route collisions, route-style links, and code-fence balance without doing a full static generate.
 
 ## MCP
 

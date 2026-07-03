@@ -107,6 +107,21 @@ describe('video prompt handler', () => {
     },
   )
 
+  it('prefers input.provider/input.model over the job-level defaults (Script tab selection)', async () => {
+    mockScriptGenerate.mockResolvedValueOnce({ text: 'motion' })
+
+    const { handleVideoPromptJob } = await import('../../../server/worker/handlers/video_prompt')
+    await handleVideoPromptJob({
+      ...BASE_JOB,
+      provider: 'anthropic',
+      input: { scene_id: 'scene-2', provider: 'gemini', model: 'gemini-3-flash' },
+    } as never)
+
+    expect(mockRegistryScript).toHaveBeenCalledWith('gemini')
+    expect(mockGetProviderKey).toHaveBeenCalledWith('gemini', 'user-1')
+    expect(mockScriptGenerate.mock.calls[0][0].model).toBe('gemini-3-flash')
+  })
+
   it('stores prompts for all scenes when no scene id is provided', async () => {
     mockScriptGenerate
       .mockResolvedValueOnce({ text: 'First motion' })
@@ -121,6 +136,29 @@ describe('video prompt handler', () => {
       'video_prompt_scene_scene-1',
       'video_prompt_scene_scene-2',
     ])
+  })
+
+  it('retries transient provider internal errors when generating all scene prompts', async () => {
+    vi.useFakeTimers()
+    try {
+      mockScriptGenerate
+        .mockResolvedValueOnce({ text: 'First motion' })
+        .mockRejectedValueOnce(new Error('{"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}'))
+        .mockResolvedValueOnce({ text: 'Second motion recovered' })
+
+      const { handleVideoPromptJob } = await import('../../../server/worker/handlers/video_prompt')
+      const run = handleVideoPromptJob({ ...BASE_JOB, input: {} } as never)
+      await vi.runAllTimersAsync()
+      await run
+
+      expect(mockScriptGenerate).toHaveBeenCalledTimes(3)
+      expect(mockStoreTextOutput.mock.calls.map(call => [call[1], call[2]])).toEqual([
+        ['First motion', 'video_prompt_scene_scene-1'],
+        ['Second motion recovered', 'video_prompt_scene_scene-2'],
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('attaches the first-frame image to a vision-capable provider call', async () => {
@@ -162,5 +200,18 @@ describe('video prompt handler', () => {
     expect(mockScriptGenerate.mock.calls[0][0].images).toHaveLength(1)
     expect(mockScriptGenerate.mock.calls[1][0].images).toBeUndefined()
     expect(mockStoreTextOutput).toHaveBeenCalledWith(expect.anything(), 'recovered motion', 'video_prompt_scene_scene-2')
+  })
+
+  it('drops the image wording when retrying text-only after a vision failure', async () => {
+    imageRows = [{ label: 'scene_image_scene-2', storage_url: 'http://img/2.png', created_at: '2026-01-01' }]
+    mockScriptGenerate
+      .mockRejectedValueOnce(new Error('vision unsupported'))
+      .mockResolvedValueOnce({ text: 'recovered motion' })
+
+    const { handleVideoPromptJob } = await import('../../../server/worker/handlers/video_prompt')
+    await handleVideoPromptJob({ ...BASE_JOB, provider: 'anthropic', input: { scene_id: 'scene-2' } } as never)
+
+    expect(mockScriptGenerate.mock.calls[0][0].messages[0].content).toContain('The attached image is this scene\'s first frame')
+    expect(mockScriptGenerate.mock.calls[1][0].messages[0].content).not.toContain('The attached image is this scene\'s first frame')
   })
 })

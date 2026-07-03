@@ -4,7 +4,7 @@
       <span class="text-xs font-medium text-gray-500 line-clamp-2">
         Scene {{ scene.order_index + 1 }}{{ scene.title ? ` - ${scene.title}` : '' }}
       </span>
-      <span class="shrink-0 text-xs text-gray-600">{{ (scene.duration ?? 0).toFixed(1) }}s</span>
+      <span class="shrink-0 text-xs text-gray-600">{{ Math.round(scene.duration ?? 0) }}s</span>
     </div>
 
     <button

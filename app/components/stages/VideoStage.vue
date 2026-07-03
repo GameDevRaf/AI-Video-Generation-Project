@@ -209,12 +209,23 @@ watch(videoJob, async (j) => {
 })
 
 async function generateAllPrompts() {
-  await startPromptsJob(props.projectId, 'video_prompt', {})
+  const provider = projectStore.settings?.default_script_provider ?? undefined
+  const model = projectStore.settings?.default_script_model ?? undefined
+  await startPromptsJob(props.projectId, 'video_prompt', {
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+  })
 }
 
 async function generateSinglePrompt(sceneId: string) {
   regeneratingPromptSceneId.value = sceneId
-  await startSinglePromptJob(props.projectId, 'video_prompt', { scene_id: sceneId })
+  const provider = projectStore.settings?.default_script_provider ?? undefined
+  const model = projectStore.settings?.default_script_model ?? undefined
+  await startSinglePromptJob(props.projectId, 'video_prompt', {
+    scene_id: sceneId,
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+  })
 }
 
 async function generateAllVideos() {
