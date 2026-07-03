@@ -14,31 +14,17 @@
       </svg>
     </button>
 
-    <!-- Current scene image + script highlight -->
-    <div class="flex gap-4 pr-10">
-      <!-- Scene image -->
-      <div class="w-32 shrink-0 aspect-video rounded-lg overflow-hidden bg-white/5 border border-white/8 flex items-center justify-center">
-        <img
-          v-if="currentSceneImage"
-          :src="currentSceneImage"
-          alt="Current scene"
-          class="w-full h-full object-cover"
-        />
-        <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-gray-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <circle cx="8.5" cy="8.5" r="1.5"/>
-          <path d="m21 15-5-5L5 21"/>
-        </svg>
-      </div>
-
-      <!-- Script segment -->
-      <div class="flex-1 min-h-[4.5rem] flex items-center">
+    <!-- Script highlight -->
+    <div class="pr-10">
+      <div class="min-h-[4.5rem] flex items-center">
         <p v-if="currentScene" class="text-sm text-gray-300 leading-relaxed">
-          <span
-            v-for="(word, i) in currentSceneWords"
-            :key="i"
-            :class="i === activeWordIndex ? 'text-white bg-white/15 rounded px-0.5' : ''"
-          >{{ word }} </span>
+          <template v-for="(token, i) in currentSceneTokens" :key="i">
+            <br v-if="token === null" />
+            <span
+              v-else
+              :class="token.idx === activeWordIndex ? 'text-white bg-white/15 rounded px-0.5' : ''"
+            >{{ token.text + ' ' }}</span>
+          </template>
         </p>
         <p v-else class="text-sm text-gray-600">Play to see script highlighted here.</p>
       </div>
@@ -129,13 +115,23 @@ const currentScene = computed(() =>
     .find(s => currentTime.value >= (s.start_time ?? 0)) ?? props.scenes[0] ?? null,
 )
 
-const currentSceneImage = computed(() =>
-  currentScene.value ? (props.sceneImages?.get(currentScene.value.id) ?? null) : null,
-)
-
 const currentSceneWords = computed(() =>
   currentScene.value?.script_text.split(/\s+/).filter(Boolean) ?? [],
 )
+
+const currentSceneTokens = computed<Array<{ text: string; idx: number } | null>>(() => {
+  const text = currentScene.value?.script_text ?? ''
+  const tokens: Array<{ text: string; idx: number } | null> = []
+  let wordIdx = 0
+  const paragraphs = text.split(/\n\n+/)
+  for (let p = 0; p < paragraphs.length; p++) {
+    if (p > 0) tokens.push(null)
+    for (const word of (paragraphs[p] ?? '').split(/\s+/).filter(Boolean)) {
+      tokens.push({ text: word, idx: wordIdx++ })
+    }
+  }
+  return tokens
+})
 
 // Approximate word highlight: divide scene duration evenly across words
 const activeWordIndex = computed(() => {
