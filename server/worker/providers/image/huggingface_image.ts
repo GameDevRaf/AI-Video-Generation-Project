@@ -1,4 +1,5 @@
 import type { ImageProvider, ImageParams, ImageResult } from '../types'
+import { VIDEO_FORMAT } from '../../../../shared/config/videoFormat'
 
 // Hugging Face Inference API — text-to-image
 // Endpoint: POST https://api-inference.huggingface.co/models/{model}
@@ -23,8 +24,8 @@ export class HuggingFaceImageProvider implements ImageProvider {
         body: JSON.stringify({
           inputs: params.prompt,
           parameters: {
-            width: 1280,
-            height: 720,
+            width: VIDEO_FORMAT.width,
+            height: VIDEO_FORMAT.height,
             num_inference_steps: 25,
             guidance_scale: 7.5,
           },

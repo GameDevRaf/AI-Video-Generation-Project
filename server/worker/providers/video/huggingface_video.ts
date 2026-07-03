@@ -1,4 +1,5 @@
 import type { VideoProvider, VideoParams, VideoResult } from '../types'
+import { VIDEO_FORMAT } from '../../../../shared/config/videoFormat'
 
 // Hugging Face Inference API — text-to-video
 // Endpoint: POST https://api-inference.huggingface.co/models/{model}
@@ -25,6 +26,8 @@ export class HuggingFaceVideoProvider implements VideoProvider {
           parameters: {
             num_frames: Math.round((params.duration ?? 5) * 8),  // ~8fps for most HF video models
             num_inference_steps: 25,
+            width: VIDEO_FORMAT.width,
+            height: VIDEO_FORMAT.height,
           },
         }),
       })

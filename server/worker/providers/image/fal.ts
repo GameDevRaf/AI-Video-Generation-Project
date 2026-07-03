@@ -12,7 +12,9 @@ export class FalImageProvider implements ImageProvider {
       input: {
         prompt: params.prompt,
         negative_prompt: params.negativePrompt,
-        image_size: 'landscape_16_9',
+        // fal's image_size enum has no raw "9:16" value — 'portrait_16_9' is its
+        // vertical preset, matching VIDEO_FORMAT's hardcoded 9:16.
+        image_size: 'portrait_16_9',
         num_images: 1,
       },
     }) as { data: { images: Array<{ url: string }> } }

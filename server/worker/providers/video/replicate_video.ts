@@ -1,4 +1,5 @@
 import type { VideoProvider, VideoParams, VideoResult } from '../types'
+import { VIDEO_FORMAT } from '../../../../shared/config/videoFormat'
 
 // Replicate video generation
 // Create: POST /v1/models/{owner}/{model}/predictions
@@ -21,7 +22,7 @@ export class ReplicateVideoProvider implements VideoProvider {
     const input: Record<string, unknown> = {
       prompt: params.prompt,
       duration: Math.round(params.duration ?? 5),
-      aspect_ratio: params.aspectRatio ?? '16:9',
+      aspect_ratio: VIDEO_FORMAT.aspectRatio,
     }
     if (params.imageUrl) {
       input.image_url = params.imageUrl

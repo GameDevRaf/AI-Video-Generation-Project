@@ -21,8 +21,7 @@ describe('HuggingFaceVideoProvider', () => {
     const { HuggingFaceVideoProvider } = await import('../../../server/worker/providers/video/huggingface_video')
     await new HuggingFaceVideoProvider().generate({
       job: {} as never, apiKey: 'hf-tok', model: 'Wan-AI/Wan2.1-T2V-14B',
-      prompt: 'A flying bird', duration: 4, aspectRatio: '16:9',
-    })
+      prompt: 'A flying bird', duration: 4,    })
     expect(mockFetch).toHaveBeenCalledWith(
       'https://api-inference.huggingface.co/models/Wan-AI/Wan2.1-T2V-14B',
       expect.objectContaining({
@@ -38,8 +37,7 @@ describe('HuggingFaceVideoProvider', () => {
     mockFetch.mockResolvedValueOnce(makeVideoResponse(vidBytes))
     const { HuggingFaceVideoProvider } = await import('../../../server/worker/providers/video/huggingface_video')
     const result = await new HuggingFaceVideoProvider().generate({
-      job: {} as never, apiKey: 'k', model: 'm', prompt: 'p', duration: 5, aspectRatio: '16:9',
-    })
+      job: {} as never, apiKey: 'k', model: 'm', prompt: 'p', duration: 5,    })
     expect(Buffer.from(result.rawBuffer!)).toEqual(vidBytes)
     expect(result.mimeType).toBe('video/mp4')
   })
@@ -50,8 +48,7 @@ describe('HuggingFaceVideoProvider', () => {
       .mockResolvedValueOnce(makeVideoResponse())
     const { HuggingFaceVideoProvider } = await import('../../../server/worker/providers/video/huggingface_video')
     await new HuggingFaceVideoProvider().generate({
-      job: {} as never, apiKey: 'k', model: 'm', prompt: 'p', duration: 5, aspectRatio: '16:9',
-    })
+      job: {} as never, apiKey: 'k', model: 'm', prompt: 'p', duration: 5,    })
     expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 
@@ -60,8 +57,7 @@ describe('HuggingFaceVideoProvider', () => {
     const { HuggingFaceVideoProvider } = await import('../../../server/worker/providers/video/huggingface_video')
     await expect(
       new HuggingFaceVideoProvider().generate({
-        job: {} as never, apiKey: 'k', model: 'm', prompt: 'p', duration: 5, aspectRatio: '16:9',
-      })
+        job: {} as never, apiKey: 'k', model: 'm', prompt: 'p', duration: 5,      })
     ).rejects.toThrow('500')
   })
 })

@@ -11,7 +11,9 @@ export class OpenAIImageProvider implements ImageProvider {
       model: params.model,
       prompt: params.prompt,
       n: 1,
-      size: '1024x1024',
+      // OpenAI only accepts a fixed size enum — '1024x1536' is its closest portrait
+      // preset to VIDEO_FORMAT's hardcoded 9:16.
+      size: '1024x1536',
       response_format: 'url',
     })
 

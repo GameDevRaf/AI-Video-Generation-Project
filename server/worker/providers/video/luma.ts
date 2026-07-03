@@ -1,5 +1,6 @@
 import LumaAI from 'lumaai'
 import type { VideoProvider, VideoParams, VideoResult } from '../types'
+import { VIDEO_FORMAT } from '../../../../shared/config/videoFormat'
 
 const POLL_INTERVAL_MS = 3_000
 const MAX_ATTEMPTS = 200  // 10 min max
@@ -14,6 +15,7 @@ export class LumaVideoProvider implements VideoProvider {
       model: params.model as 'ray-2' | 'ray-flash-2',
       prompt: params.prompt,
       resolution: '720p',
+      aspect_ratio: VIDEO_FORMAT.aspectRatio,
       duration: `${Math.round(params.duration ?? 5)}s`,
       ...(params.imageUrl
         ? { keyframes: { frame0: { type: 'image', url: params.imageUrl } } }

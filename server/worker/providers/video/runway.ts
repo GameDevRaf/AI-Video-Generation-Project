@@ -19,7 +19,9 @@ export class RunwayVideoProvider implements VideoProvider {
       model: params.model,
       promptImage: params.imageUrl,
       promptText: params.prompt,
-      ratio: '1280:720',
+      // Runway only accepts a fixed set of "W:H" ratio presets — '720:1280' is its
+      // portrait preset matching VIDEO_FORMAT's hardcoded 9:16.
+      ratio: '720:1280',
       duration: Math.round(params.duration ?? 5),
     } as ImageToVideoCreateParams)
 

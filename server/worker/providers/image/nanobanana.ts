@@ -1,4 +1,5 @@
 import type { ImageProvider, ImageParams, ImageResult } from '../types'
+import { VIDEO_FORMAT } from '../../../../shared/config/videoFormat'
 
 // Nano Banana = Google Gemini native image generation (Gemini 3.1 Flash Image / Gemini 3 Pro Image).
 // Uses the same Google AI Studio / Gemini API key as the Gemini script provider.
@@ -15,6 +16,7 @@ export class NanaBananaImageProvider implements ImageProvider {
       contents: [{ parts: [{ text: params.prompt }] }],
       generationConfig: {
         responseModalities: ['TEXT', 'IMAGE'],
+        imageConfig: { aspectRatio: VIDEO_FORMAT.aspectRatio },
       },
     }
 

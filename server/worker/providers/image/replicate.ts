@@ -1,4 +1,5 @@
 import type { ImageProvider, ImageParams, ImageResult } from '../types'
+import { VIDEO_FORMAT } from '../../../../shared/config/videoFormat'
 
 // Replicate HTTP API: https://replicate.com/docs/reference/http
 // Model format: "{owner}/{model-name}" — maps to the official model endpoint.
@@ -28,7 +29,7 @@ export class ReplicateImageProvider implements ImageProvider {
         input: {
           prompt: params.prompt,
           ...(params.negativePrompt ? { negative_prompt: params.negativePrompt } : {}),
-          aspect_ratio: params.aspectRatio ?? '16:9',
+          aspect_ratio: VIDEO_FORMAT.aspectRatio,
           num_outputs: 1,
         },
       }),

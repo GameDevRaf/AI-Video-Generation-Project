@@ -1,5 +1,6 @@
 import { SignJWT } from 'jose'
 import type { VideoProvider, VideoParams, VideoResult } from '../types'
+import { VIDEO_FORMAT } from '../../../../shared/config/videoFormat'
 
 // Kling requires two credentials stored as JSON: { ak, sk }
 // Store as JSON.stringify({ ak: "...", sk: "..." }) in api_keys.encrypted_secret
@@ -43,7 +44,7 @@ export class KlingVideoProvider implements VideoProvider {
         image: params.imageUrl,
         prompt: params.prompt,
         duration: String(Math.round(params.duration ?? 5)),
-        aspect_ratio: params.aspectRatio ?? '16:9',
+        aspect_ratio: VIDEO_FORMAT.aspectRatio,
       }),
     })
 

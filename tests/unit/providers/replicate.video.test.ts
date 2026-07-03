@@ -19,8 +19,7 @@ describe('ReplicateVideoProvider', () => {
     const { ReplicateVideoProvider } = await import('../../../server/worker/providers/video/replicate_video')
     const result = await new ReplicateVideoProvider().generate({
       job: {} as never, apiKey: 'rep-key', model: 'minimax/video-01-live',
-      prompt: 'A video', duration: 5, aspectRatio: '16:9',
-    })
+      prompt: 'A video', duration: 5,    })
     expect(mockFetch).toHaveBeenCalledWith(
       'https://api.replicate.com/v1/models/minimax/video-01-live/predictions',
       expect.objectContaining({ method: 'POST' }),
@@ -36,8 +35,7 @@ describe('ReplicateVideoProvider', () => {
     const { ReplicateVideoProvider } = await import('../../../server/worker/providers/video/replicate_video')
     const promise = new ReplicateVideoProvider().generate({
       job: {} as never, apiKey: 'k', model: 'minimax/video-01-live',
-      prompt: 'p', duration: 5, aspectRatio: '16:9',
-    })
+      prompt: 'p', duration: 5,    })
 
     await vi.advanceTimersByTimeAsync(5_500)
     const result = await promise
@@ -54,8 +52,7 @@ describe('ReplicateVideoProvider', () => {
     const { ReplicateVideoProvider } = await import('../../../server/worker/providers/video/replicate_video')
     await new ReplicateVideoProvider().generate({
       job: {} as never, apiKey: 'k', model: 'minimax/video-01-live',
-      prompt: 'p', duration: 4.2, aspectRatio: '16:9',
-    })
+      prompt: 'p', duration: 4.2,    })
     expect(sentBody.input?.duration).toBe(4)
   })
 
@@ -63,8 +60,7 @@ describe('ReplicateVideoProvider', () => {
     const { ReplicateVideoProvider } = await import('../../../server/worker/providers/video/replicate_video')
     await expect(
       new ReplicateVideoProvider().generate({
-        job: {} as never, apiKey: 'k', model: 'noowner', prompt: 'p', duration: 5, aspectRatio: '16:9',
-      })
+        job: {} as never, apiKey: 'k', model: 'noowner', prompt: 'p', duration: 5,      })
     ).rejects.toThrow('owner/model-name')
   })
 
@@ -76,8 +72,7 @@ describe('ReplicateVideoProvider', () => {
     const { ReplicateVideoProvider } = await import('../../../server/worker/providers/video/replicate_video')
     const assertion = expect(
       new ReplicateVideoProvider().generate({
-        job: {} as never, apiKey: 'k', model: 'a/b', prompt: 'p', duration: 5, aspectRatio: '16:9',
-      })
+        job: {} as never, apiKey: 'k', model: 'a/b', prompt: 'p', duration: 5,      })
     ).rejects.toThrow('Timeout')
     await assertion
   })

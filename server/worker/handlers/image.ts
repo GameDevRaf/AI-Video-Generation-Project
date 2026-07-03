@@ -19,7 +19,6 @@ export async function handleImageJob(job: DbJob) {
     provider?: string
     model?: string
     negative_prompt?: string
-    aspect_ratio?: string
   }
 
   const providerId = input.provider ?? job.provider ?? 'fal'
@@ -37,7 +36,6 @@ export async function handleImageJob(job: DbJob) {
     model,
     prompt: input.prompt,
     negativePrompt: input.negative_prompt,
-    aspectRatio: input.aspect_ratio ?? '16:9',
   })
 
   // Stability AI returns rawBuffer directly; all others return a URL to download

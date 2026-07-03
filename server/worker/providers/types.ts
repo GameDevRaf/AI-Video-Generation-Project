@@ -19,10 +19,11 @@ export interface ScriptProvider {
 }
 
 // ── Image ──────────────────────────────────────────────────
+// Aspect ratio is not caller-configurable — every provider hardcodes VIDEO_FORMAT
+// (see shared/config/videoFormat.ts) directly, so it's not part of these params.
 export interface ImageParams extends ProviderParams {
   prompt: string
   negativePrompt?: string
-  aspectRatio?: string
 }
 // Stability AI returns raw bytes; all others return a URL
 export interface ImageResult {
@@ -53,11 +54,12 @@ export interface AudioProvider {
 }
 
 // ── Video ──────────────────────────────────────────────────
+// Aspect ratio is not caller-configurable — every provider hardcodes VIDEO_FORMAT
+// (see shared/config/videoFormat.ts) directly, so it's not part of these params.
 export interface VideoParams extends ProviderParams {
   prompt: string
   imageUrl?: string
   duration?: number
-  aspectRatio?: string
 }
 // Most providers return a URL; Veo and HF return raw bytes (auth-gated or direct buffer)
 export interface VideoResult {

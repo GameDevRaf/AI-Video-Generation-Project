@@ -20,7 +20,6 @@ export async function handleVideoJob(job: DbJob) {
     duration?: number
     provider?: string
     model?: string
-    aspect_ratio?: string
   }
 
   const providerId = input.provider ?? job.provider ?? 'runway'
@@ -39,7 +38,6 @@ export async function handleVideoJob(job: DbJob) {
     prompt: input.prompt,
     imageUrl: input.image_url,
     duration: input.duration ?? 5,
-    aspectRatio: input.aspect_ratio ?? '16:9',
   })
 
   // Providers like Veo and HF return rawBuffer directly (auth-gated or inline bytes)

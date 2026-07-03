@@ -6,7 +6,7 @@
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-4 py-6"
         @click.self="$emit('close')"
       >
-        <div class="media-preview-panel relative w-full max-w-6xl max-h-[92vh] flex flex-col gap-3">
+        <div class="media-preview-panel relative max-w-6xl max-h-[92vh] flex flex-col items-center gap-3">
           <div class="absolute right-3 top-3 z-10 flex items-center gap-2">
             <button
               class="w-9 h-9 rounded-full bg-black/70 border border-white/15 text-white/80 hover:text-white hover:bg-black/90 flex items-center justify-center transition-colors disabled:opacity-50"
@@ -38,18 +38,18 @@
               v-if="type === 'image'"
               :src="url"
               :alt="title"
-              class="max-h-[88vh] w-full object-contain"
+              class="max-h-[88vh] max-w-[90vw] w-auto h-auto object-contain block"
             />
             <video
               v-else
               :src="url"
-              class="max-h-[88vh] w-full bg-black"
+              class="max-h-[88vh] max-w-[90vw] w-auto h-auto object-contain bg-black block"
               controls
               autoplay
               playsinline
             />
           </div>
-          <p v-if="title" class="text-sm text-gray-400 truncate px-1">{{ title }}</p>
+          <p v-if="title" class="text-sm text-gray-400 truncate px-1 max-w-[90vw]">{{ title }}</p>
         </div>
       </div>
     </Transition>

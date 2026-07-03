@@ -1,4 +1,5 @@
 import type { VideoProvider, VideoParams, VideoResult } from '../types'
+import { VIDEO_FORMAT } from '../../../../shared/config/videoFormat'
 
 const BASE = 'https://api.minimax.io/v1'
 const POLL_INTERVAL_MS = 10_000
@@ -21,6 +22,7 @@ export class MiniMaxVideoProvider implements VideoProvider {
         prompt: params.prompt,
         duration: 6,
         resolution: '720P',
+        aspect_ratio: VIDEO_FORMAT.aspectRatio,
         prompt_optimizer: true,
         ...(params.imageUrl ? { first_frame_image: params.imageUrl } : {}),
       }),

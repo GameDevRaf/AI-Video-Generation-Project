@@ -54,8 +54,7 @@ describe('VeoVideoProvider', () => {
     const { VeoVideoProvider } = await import('../../../server/worker/providers/video/veo')
     const promise = new VeoVideoProvider().generate({
       job: {} as never, apiKey: 'goog-key', model: 'veo-3.1-generate-preview',
-      prompt: 'A cat video', duration: 5, aspectRatio: '16:9',
-    })
+      prompt: 'A cat video', duration: 5,    })
 
     await vi.advanceTimersByTimeAsync(10_500)
     await promise
@@ -75,8 +74,7 @@ describe('VeoVideoProvider', () => {
     const { VeoVideoProvider } = await import('../../../server/worker/providers/video/veo')
     const promise = new VeoVideoProvider().generate({
       job: {} as never, apiKey: 'k', model: 'veo-3.1-generate-preview',
-      prompt: 'A sunset', duration: 5, aspectRatio: '16:9',
-    })
+      prompt: 'A sunset', duration: 5,    })
 
     // Two poll intervals (pending + done)
     await vi.advanceTimersByTimeAsync(10_500)
@@ -96,8 +94,7 @@ describe('VeoVideoProvider', () => {
     const { VeoVideoProvider } = await import('../../../server/worker/providers/video/veo')
     const promise = new VeoVideoProvider().generate({
       job: {} as never, apiKey: 'goog-key', model: 'veo-3.1-generate-preview',
-      prompt: 'A cat video', duration: 6.5, aspectRatio: '16:9',
-    })
+      prompt: 'A cat video', duration: 6.5,    })
 
     await vi.advanceTimersByTimeAsync(10_500)
     await promise
@@ -112,8 +109,7 @@ describe('VeoVideoProvider', () => {
     const { VeoVideoProvider } = await import('../../../server/worker/providers/video/veo')
     await expect(
       new VeoVideoProvider().generate({
-        job: {} as never, apiKey: 'k', model: 'm', prompt: 'p', duration: 5, aspectRatio: '16:9',
-      })
+        job: {} as never, apiKey: 'k', model: 'm', prompt: 'p', duration: 5,      })
     ).rejects.toThrow('operation name')
   })
 
@@ -125,8 +121,7 @@ describe('VeoVideoProvider', () => {
     const { VeoVideoProvider } = await import('../../../server/worker/providers/video/veo')
     const assertion = expect(
       new VeoVideoProvider().generate({
-        job: {} as never, apiKey: 'k', model: 'm', prompt: 'p', duration: 5, aspectRatio: '16:9',
-      })
+        job: {} as never, apiKey: 'k', model: 'm', prompt: 'p', duration: 5,      })
     ).rejects.toThrow('Rate limited')
 
     await vi.advanceTimersByTimeAsync(10_500)

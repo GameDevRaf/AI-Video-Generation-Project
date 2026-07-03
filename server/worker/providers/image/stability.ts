@@ -1,4 +1,5 @@
 import type { ImageProvider, ImageParams, ImageResult } from '../types'
+import { VIDEO_FORMAT } from '../../../../shared/config/videoFormat'
 
 // Stability AI v2beta returns raw image bytes (not a JSON URL).
 // The handler uses ImageResult.rawBuffer directly — no URL download step.
@@ -13,7 +14,7 @@ export class StabilityImageProvider implements ImageProvider {
     const formData = new FormData()
     formData.append('prompt', params.prompt)
     formData.append('output_format', 'png')
-    formData.append('aspect_ratio', params.aspectRatio ?? '16:9')
+    formData.append('aspect_ratio', VIDEO_FORMAT.aspectRatio)
     if (params.negativePrompt) formData.append('negative_prompt', params.negativePrompt)
 
     const res = await fetch(endpoint, {

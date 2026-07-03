@@ -1,4 +1,5 @@
 import type { VideoProvider, VideoParams, VideoResult } from '../types'
+import { VIDEO_FORMAT } from '../../../../shared/config/videoFormat'
 
 // Google Veo video generation via Gemini API (Google AI Studio key)
 // Create: POST https://generativelanguage.googleapis.com/v1beta/models/{model}:predictLongRunning
@@ -25,10 +26,8 @@ export class VeoVideoProvider implements VideoProvider {
       const imgBuffer = Buffer.from(await imgRes.arrayBuffer())
       const mimeType = imgRes.headers.get('content-type') ?? 'image/jpeg'
       instance.image = {
-        inlineData: {
-          mimeType,
-          data: imgBuffer.toString('base64'),
-        },
+        bytesBase64Encoded: imgBuffer.toString('base64'),
+        mimeType,
       }
     }
 
@@ -41,7 +40,9 @@ export class VeoVideoProvider implements VideoProvider {
       body: JSON.stringify({
         instances: [instance],
         parameters: {
-          aspectRatio: params.aspectRatio ?? '16:9',
+          aspectRatio: VIDEO_FORMAT.aspectRatio,
+          // Veo's own API caps a single generation at 8s regardless of the project's
+          // overall VIDEO_FORMAT.maxDuration — unrelated technical limit, left as-is.
           durationSeconds: Math.round(Math.max(4, Math.min(params.duration ?? 8, 8))),
           resolution: '720p',
         },

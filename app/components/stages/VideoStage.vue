@@ -1,5 +1,5 @@
 <template>
-  <section class="flex flex-col gap-8 px-8 py-10 max-w-5xl mx-auto w-full">
+  <section class="flex flex-col gap-8 px-8 py-10 max-w-6xl mx-auto w-full">
     <!-- Header -->
     <div class="flex flex-col gap-1">
       <h2 class="text-lg font-semibold">Video</h2>
@@ -71,7 +71,7 @@
           @click="activeSceneId = scene.id"
         >
           <div
-            class="w-24 aspect-video rounded-md overflow-hidden border transition-colors"
+            class="w-14 aspect-[9/16] rounded-md overflow-hidden border transition-colors"
             :class="activeSceneId === scene.id ? 'border-white/50' : 'border-white/10'"
           >
             <video
@@ -95,7 +95,7 @@
     <!-- Scene cards grid -->
     <div v-if="scenesLoading" class="text-sm text-gray-500">Loading scenes…</div>
     <div v-else-if="!scenes.length" class="text-sm text-gray-500">No scenes found. Go back and split your script first.</div>
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
       <StagesVideoSceneCard
         v-for="scene in scenes"
         :key="scene.id"
