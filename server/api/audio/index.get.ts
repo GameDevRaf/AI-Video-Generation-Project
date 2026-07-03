@@ -34,5 +34,8 @@ export default defineEventHandler(async (event) => {
 
   if (!output?.storage_url) return null
 
-  return { url: output.storage_url }
+  const sceneSnapshot = (output.metadata as { scene_snapshot?: { id: string; script_text: string }[] } | null)
+    ?.scene_snapshot ?? null
+
+  return { url: output.storage_url, sceneSnapshot }
 })

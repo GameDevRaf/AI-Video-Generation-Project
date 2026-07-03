@@ -39,15 +39,21 @@
     <!-- Scene cards -->
     <div v-if="scenesLoading" class="text-sm text-gray-500">Loading scenes…</div>
     <div v-else-if="scenes.length" class="flex flex-col gap-3">
-      <StagesSceneCard
-        v-for="(scene, i) in scenes"
-        :key="scene.id"
-        :scene="scene"
-        :is-first="i === 0"
-        :is-last="i === scenes.length - 1"
-        @update="updateScene"
-        @move="moveScene"
-      />
+      <TransitionGroup name="scene-list" tag="div" class="flex flex-col gap-3">
+        <StagesSceneCard
+          v-for="(scene, i) in scenes"
+          :key="scene.id"
+          :scene="scene"
+          :is-first="i === 0"
+          :is-last="i === scenes.length - 1"
+          :is-only="scenes.length === 1"
+          @update="updateScene"
+          @move="moveScene"
+          @delete="deleteScene"
+        />
+      </TransitionGroup>
+
+      <StagesNewSceneCard :creating="creatingScene" @create="createScene" />
 
       <!-- Advance button -->
       <div class="pt-2">
@@ -67,7 +73,26 @@ const props = defineProps<{ projectId: string; scriptText: string }>()
 defineEmits<{ done: [] }>()
 
 const { job, isRunning, isFailed, error: pollerError, startJob } = useJobPoller()
-const { scenes, loading: scenesLoading, totalDuration, fetchScenes, updateScene, moveScene } = useScenes(toRef(props, 'projectId'))
+const {
+  scenes, loading: scenesLoading, totalDuration,
+  fetchScenes, updateScene, moveScene, deleteScene: deleteSceneApi, createScene: createSceneApi,
+} = useScenes(toRef(props, 'projectId'))
+
+const creatingScene = ref(false)
+
+async function deleteScene(id: string) {
+  await deleteSceneApi(id)
+}
+
+async function createScene() {
+  if (creatingScene.value) return
+  creatingScene.value = true
+  try {
+    await createSceneApi()
+  } finally {
+    creatingScene.value = false
+  }
+}
 
 // Load existing scenes on mount (if a previous split was done)
 onMounted(fetchScenes)
@@ -87,3 +112,25 @@ function formatTime(seconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 </script>
+
+<style scoped>
+.scene-list-move {
+  transition: transform 200ms ease;
+}
+
+.scene-list-enter-active,
+.scene-list-leave-active {
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.scene-list-enter-from,
+.scene-list-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+.scene-list-leave-active {
+  position: absolute;
+  width: 100%;
+}
+</style>

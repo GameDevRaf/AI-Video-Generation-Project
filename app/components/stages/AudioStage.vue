@@ -74,17 +74,25 @@
 
     <!-- Generate and upload controls -->
     <div class="flex items-center gap-4 flex-wrap">
-      <button
-        :disabled="isGenerating || !scenes.length"
-        class="px-5 py-2 bg-white text-gray-950 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors disabled:opacity-40"
-        @click="generate"
-      >
-        <span v-if="isGenerating" class="flex items-center gap-2">
-          <span class="inline-block w-3.5 h-3.5 border-2 border-gray-400 border-t-gray-800 rounded-full animate-spin" />
-          Generating audio… ({{ jobState.completed }}/{{ jobState.total }})
-        </span>
-        <span v-else>{{ audioUrl ? 'Regenerate audio' : 'Generate audio' }}</span>
-      </button>
+      <div class="relative">
+        <span
+          v-if="audioMismatch"
+          class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-orange-400 z-10 pointer-events-none"
+          data-testid="audio-mismatch-dot"
+          title="Scene text or order has changed since this audio was generated"
+        />
+        <button
+          :disabled="isGenerating || !scenes.length"
+          class="px-5 py-2 bg-white text-gray-950 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors disabled:opacity-40"
+          @click="generate"
+        >
+          <span v-if="isGenerating" class="flex items-center gap-2">
+            <span class="inline-block w-3.5 h-3.5 border-2 border-gray-400 border-t-gray-800 rounded-full animate-spin" />
+            Generating audio… ({{ jobState.completed }}/{{ jobState.total }})
+          </span>
+          <span v-else>{{ audioUrl ? 'Regenerate audio' : 'Generate audio' }}</span>
+        </button>
+      </div>
 
       <input
         ref="audioInput"
@@ -142,6 +150,18 @@ const audioStage = useAudioStage(toRef(props, 'projectId'))
 const { settings, audioUrl, currentVoices } = audioStage
 
 const { scenes, fetchScenes, recalcTimestamps, persistTimestamps } = useScenes(toRef(props, 'projectId'))
+
+// Orange dot: current scene text/order/count differs from the snapshot captured
+// when the voice_track was last combined. Audio isn't auto-regenerated on scene
+// edits (it costs API calls), so this just surfaces staleness.
+const audioMismatch = computed(() => {
+  const snap = audioStage.generationSnapshot.value
+  if (!snap || !audioUrl.value) return false
+  const current = scenes.value.map(s => `${s.id}:${s.script_text}`).join('|')
+  const generated = snap.map(s => `${s.id}:${s.script_text}`).join('|')
+  return current !== generated
+})
+
 const audioInput = ref<HTMLInputElement | null>(null)
 const uploadingAudio = ref(false)
 const uploadError = ref<string | null>(null)
@@ -213,11 +233,13 @@ async function onAllAudioJobsComplete() {
   if (jobState.value.failed < jobState.value.total) {
     // At least some succeeded — combine per-scene audio into a single voice_track for the player
     try {
-      const result = await $fetch<{ url: string }>('/api/audio/combine', {
+      await $fetch<{ url: string }>('/api/audio/combine', {
         method: 'POST',
         body: { projectId: props.projectId },
       })
-      audioStage.setAudioUrl(result.url)
+      // Re-fetch rather than setAudioUrl() directly so the fresh scene_snapshot
+      // (written by the combine step) comes down too and clears the mismatch dot.
+      await audioStage.fetchExistingAudio()
     } catch {
       // Non-fatal: export still uses per-scene audio; player just won't show
     }

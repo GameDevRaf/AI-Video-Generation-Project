@@ -47,14 +47,16 @@ export function useAudioStage(projectId: MaybeRef<string>) {
 
   const audioUrl = ref<string | null>(null)
   const loading = ref(false)
+  const generationSnapshot = ref<{ id: string; script_text: string }[] | null>(null)
 
   async function fetchExistingAudio() {
     loading.value = true
     try {
-      const data = await $fetch<{ url: string; jobInput: unknown } | null>('/api/audio', {
+      const data = await $fetch<{ url: string; sceneSnapshot: { id: string; script_text: string }[] | null } | null>('/api/audio', {
         query: { projectId: toValue(projectId) },
       })
       if (data?.url) audioUrl.value = data.url
+      generationSnapshot.value = data?.sceneSnapshot ?? null
     } finally {
       loading.value = false
     }
@@ -75,6 +77,7 @@ export function useAudioStage(projectId: MaybeRef<string>) {
     settings,
     audioUrl,
     loading,
+    generationSnapshot,
     currentVoices,
     fetchExistingAudio,
     setAudioUrl,

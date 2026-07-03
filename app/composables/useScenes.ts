@@ -62,6 +62,31 @@ export function useScenes(projectId: MaybeRef<string>) {
     await persistTimestamps(recalced)
   }
 
+  async function deleteScene(id: string) {
+    const idx = scenes.value.findIndex(s => s.id === id)
+    if (idx === -1) return
+
+    await $fetch(`/api/scenes/${id}`, { method: 'DELETE' })
+
+    const remaining = scenes.value.filter(s => s.id !== id)
+    const recalced = recalcTimestamps(remaining)
+    scenes.value = recalced
+    if (recalced.length) await persistTimestamps(recalced)
+  }
+
+  async function createScene() {
+    const created = await $fetch<DbScene>('/api/scenes', {
+      method: 'POST',
+      body: { projectId: toValue(projectId) },
+    })
+
+    const appended = [...scenes.value, created]
+    const recalced = recalcTimestamps(appended)
+    scenes.value = recalced
+    await persistTimestamps(recalced)
+    return created
+  }
+
   async function persistTimestamps(list: DbScene[]) {
     await $fetch('/api/scenes/reorder', {
       method: 'POST',
@@ -82,5 +107,5 @@ export function useScenes(projectId: MaybeRef<string>) {
     scenes.value.reduce((sum, s) => sum + (s.duration ?? 0), 0),
   )
 
-  return { scenes, loading, error, fetchScenes, updateScene, moveScene, totalDuration, recalcTimestamps, persistTimestamps }
+  return { scenes, loading, error, fetchScenes, updateScene, moveScene, deleteScene, createScene, totalDuration, recalcTimestamps, persistTimestamps }
 }

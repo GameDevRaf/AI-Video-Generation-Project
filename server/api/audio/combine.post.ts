@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
   // Fetch scenes in playback order
   const { data: scenes } = await adminSupabase
     .from('scenes')
-    .select('id, order_index')
+    .select('id, order_index, script_text')
     .eq('project_id', projectId)
     .order('order_index')
 
@@ -136,7 +136,11 @@ export default defineEventHandler(async (event) => {
       storage_url: storageUrl,
       storage_path: storageKey,
       mime_type: 'audio/mpeg',
-      metadata: { combined: true, scene_count: scenes.length },
+      metadata: {
+        combined: true,
+        scene_count: scenes.length,
+        scene_snapshot: scenes.map(s => ({ id: s.id, script_text: s.script_text })),
+      },
     })
 
     return { url: storageUrl }

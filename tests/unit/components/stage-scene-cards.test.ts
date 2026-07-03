@@ -1,9 +1,10 @@
 // @vitest-environment nuxt
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import ImageSceneCard from '../../../app/components/stages/ImageSceneCard.vue'
 import VideoSceneCard from '../../../app/components/stages/VideoSceneCard.vue'
+import SceneCard from '../../../app/components/stages/SceneCard.vue'
 
 const scene = {
   id: 'scene-1',
@@ -71,6 +72,51 @@ describe('stage scene cards', () => {
     await wrapper.get('[data-testid="video-regenerate-prompt"]').trigger('click')
 
     expect(wrapper.emitted('regenerate-prompt')).toEqual([['scene-1']])
+  })
+})
+
+// ── SceneCard delete button ─────────────────────────────────────────────────────
+
+describe('SceneCard delete button', () => {
+  it('emits delete with the scene id after the user confirms', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    const wrapper = mount(SceneCard, {
+      props: { scene, isFirst: true, isLast: true },
+    })
+
+    await wrapper.get('[data-testid="scene-delete-button"]').trigger('click')
+
+    expect(wrapper.emitted('delete')).toEqual([['scene-1']])
+    vi.unstubAllGlobals()
+  })
+
+  it('does not emit delete if the user cancels the confirmation', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => false))
+    const wrapper = mount(SceneCard, {
+      props: { scene, isFirst: true, isLast: true },
+    })
+
+    await wrapper.get('[data-testid="scene-delete-button"]').trigger('click')
+
+    expect(wrapper.emitted('delete')).toBeUndefined()
+    vi.unstubAllGlobals()
+  })
+
+  it('is disabled and never emits delete when it is the only scene', async () => {
+    const confirmMock = vi.fn(() => true)
+    vi.stubGlobal('confirm', confirmMock)
+    const wrapper = mount(SceneCard, {
+      props: { scene, isFirst: true, isLast: true, isOnly: true },
+    })
+
+    const button = wrapper.get('[data-testid="scene-delete-button"]')
+    expect(button.attributes('disabled')).toBeDefined()
+
+    await button.trigger('click')
+
+    expect(confirmMock).not.toHaveBeenCalled()
+    expect(wrapper.emitted('delete')).toBeUndefined()
+    vi.unstubAllGlobals()
   })
 })
 
