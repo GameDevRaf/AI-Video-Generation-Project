@@ -1,7 +1,7 @@
 {
-  "name": "ai-video-generation-docs",
+  "name": "vira-docs",
   "private": true,
-  "description": "Docus documentation site for the AI Video Generation Project.",
+  "description": "Docus documentation site for Vira.",
   "scripts": {
     "dev": "nuxi dev --port 3001",
     "build": "node --max-old-space-size=4096 ./node_modules/@nuxt/cli/bin/nuxi.mjs build",

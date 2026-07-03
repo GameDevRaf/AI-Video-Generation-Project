@@ -1,6 +1,6 @@
-# AI Video Generation Docs Site
+# Vira Docs Site
 
-This folder is a self-contained [Docus](https://docus.dev) app for the AI Video Generation Project documentation.
+This folder is a self-contained [Docus](https://docus.dev) app for the Vira documentation.
 
 It runs separately from the main Nuxt app so the documentation theme, Nuxt Content routes, search, Mermaid diagrams, and MCP endpoint do not collide with application routes or middleware.
 

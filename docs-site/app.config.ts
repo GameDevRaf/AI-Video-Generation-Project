@@ -3,8 +3,13 @@ export default defineAppConfig({
     locale: 'en',
     colorMode: 'dark',
   },
+  github: {
+    url: 'https://github.com/GameDevRaf/AI-Video-Generation-Project',
+    branch: 'master',
+    rootDir: 'docs-site',
+  },
   header: {
-    title: 'AI Video Docs',
+    title: 'Vira',
   },
   navigation: {
     sub: 'header',
@@ -13,8 +18,8 @@ export default defineAppConfig({
     fts: true,
   },
   seo: {
-    title: 'AI Video Generation Docs',
-    description: 'Developer documentation for the AI Video Generation Project.',
+    title: 'Vira Docs',
+    description: 'Developer documentation for Vira.',
   },
   socials: {
     github: {
