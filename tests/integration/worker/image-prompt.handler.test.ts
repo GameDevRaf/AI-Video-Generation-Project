@@ -19,6 +19,13 @@ vi.mock('../../../server/worker/lib/jobs', () => ({
   updateJobStatus: mockUpdateJobStatus,
 }))
 
+// The visual-description step is exercised by its own test; here it's stubbed so
+// the handler receives a ready-made anchor + per-scene descriptions.
+const mockEnsureVisualDescriptions = vi.fn()
+vi.mock('../../../server/worker/lib/visualDescriptions', () => ({
+  ensureVisualDescriptions: mockEnsureVisualDescriptions,
+}))
+
 const allScenes = [
   { id: 'scene-1', title: 'One', script_text: 'First scene' },
   { id: 'scene-2', title: 'Two', script_text: 'Second scene' },
@@ -55,7 +62,16 @@ const BASE_JOB = {
 }
 
 describe('image prompt handler', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockEnsureVisualDescriptions.mockResolvedValue({
+      anchor: 'ANCHOR: warm hand-drawn style',
+      byScene: new Map([
+        ['scene-1', 'desc one'],
+        ['scene-2', 'desc two'],
+      ]),
+    })
+  })
 
   it.each(['anthropic', 'openai', 'gemini', 'groq', 'mistral'])(
     'uses selected script provider %s when regenerating one scene',
@@ -85,4 +101,20 @@ describe('image prompt handler', () => {
       expect(providerInput).not.toContain('scene-1')
     },
   )
+
+  it('ensures visual descriptions first and builds the prompt from them (not raw script_text)', async () => {
+    mockScriptGenerate.mockResolvedValueOnce({
+      text: JSON.stringify([{ scene_id: 'scene-2', prompt: 'img' }]),
+    })
+
+    const { handleImagePromptJob } = await import('../../../server/worker/handlers/image_prompt')
+    await handleImagePromptJob({ ...BASE_JOB, input: { scene_id: 'scene-2' } } as never)
+
+    expect(mockEnsureVisualDescriptions).toHaveBeenCalledTimes(1)
+    // description feeds the user message; the anchor feeds the system prompt
+    const call = mockScriptGenerate.mock.calls[0][0]
+    expect(call.messages[0].content).toContain('desc two')
+    expect(call.messages[0].content).not.toContain('Second scene')
+    expect(call.systemPrompt).toContain('ANCHOR')
+  })
 })

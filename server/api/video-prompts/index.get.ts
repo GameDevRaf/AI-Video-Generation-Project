@@ -18,28 +18,30 @@ export default defineEventHandler(async (event) => {
 
   if (!project) throw createError({ statusCode: 403, message: 'Project not found' })
 
-  const { data: job } = await supabase
-    .from('jobs')
-    .select('id')
-    .eq('project_id', projectId)
-    .eq('type', 'video_prompt')
-    .eq('status', 'completed')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
-
-  if (!job) return []
-
+  // Query job_outputs directly (by label prefix) so single-scene regenerations
+  // don't drop other scenes' prompts — mirrors the image-prompts endpoint.
   const { data: outputs } = await supabase
     .from('job_outputs')
     .select('id, label, metadata')
-    .eq('job_id', job.id)
+    .eq('project_id', projectId)
     .like('label', 'video_prompt_scene_%')
+    .order('created_at', { ascending: false })
 
-  return (outputs ?? []).map((o: { id: string; label: string | null; metadata: unknown }) => ({
-    sceneId: o.label!.replace('video_prompt_scene_', ''),
-    outputId: o.id,
-    prompt: (o.metadata as { content?: string } | null)?.content ?? '',
-  }))
+  // Deduplicate: newest prompt per scene wins
+  const seen = new Set<string>()
+  const result: { sceneId: string; outputId: string; prompt: string }[] = []
+
+  for (const o of outputs ?? []) {
+    const sceneId = o.label?.replace('video_prompt_scene_', '') ?? ''
+    if (!sceneId || seen.has(sceneId)) continue
+    seen.add(sceneId)
+    result.push({
+      sceneId,
+      outputId: o.id,
+      prompt: (o.metadata as { content?: string } | null)?.content ?? '',
+    })
+  }
+
+  return result
 })
 

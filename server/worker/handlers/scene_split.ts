@@ -3,6 +3,7 @@ import { getProviderKey } from '../lib/getProviderKey'
 import { providerRegistry } from '../providers/registry'
 import { getCatalogEntry } from '../providers/catalog'
 import { updateJobStatus } from '../lib/jobs'
+import { resolveScriptProvider, extractJsonArray } from '../lib/scriptProvider'
 import type { DbJob } from '../../../app/types/database.types'
 
 interface SceneData {
@@ -11,20 +12,10 @@ interface SceneData {
   duration: number  // seconds
 }
 
-async function resolveSceneSplitProvider(job: DbJob): Promise<string> {
-  if (job.provider) return job.provider
-  const { data } = await adminSupabase
-    .from('user_settings')
-    .select('default_script_provider')
-    .eq('user_id', job.user_id)
-    .single()
-  return data?.default_script_provider ?? 'anthropic'
-}
-
 export async function handleSceneSplitJob(job: DbJob) {
   const input = job.input as { script_text: string }
 
-  const providerId = await resolveSceneSplitProvider(job)
+  const providerId = await resolveScriptProvider(job)
   const meta = getCatalogEntry(providerId)
   const model = job.model ?? meta?.defaultModel ?? 'claude-sonnet-4-6'
 
@@ -51,14 +42,18 @@ Schema: [{ "title": string, "script_text": string, "duration": number }]`,
   })
 
   // Extract the JSON array from the response, tolerating preamble or code fences
-  const trimmed = raw.trim().replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
-  const start = trimmed.indexOf('[')
-  const end = trimmed.lastIndexOf(']')
-  const json = start !== -1 && end > start ? trimmed.slice(start, end + 1) : trimmed
-  const scenes: SceneData[] = JSON.parse(json)
+  const scenes: SceneData[] = JSON.parse(extractJsonArray(raw.trim()))
 
   // Delete any existing scenes for this project (re-split replaces all)
   await adminSupabase.from('scenes').delete().eq('project_id', job.project_id)
+
+  // Scenes changed, so the cohesive visual descriptions are now stale. Drop them
+  // (and the shared style anchor) so they are regenerated on the next prompt job.
+  await adminSupabase
+    .from('job_outputs')
+    .delete()
+    .eq('project_id', job.project_id)
+    .like('label', 'visual_%')
 
   // Calculate cumulative timestamps and insert
   let cursor = 0

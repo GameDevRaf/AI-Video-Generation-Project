@@ -7,10 +7,21 @@ export interface ProviderParams {
 }
 
 // ── Script ─────────────────────────────────────────────────
+/**
+ * An image attached to the final user turn for vision-capable providers.
+ * Carries pre-fetched base64 bytes (the caller fetches + handles failures) so
+ * adapters stay free of network IO. Text-only providers ignore `images`.
+ */
+export interface ScriptImage {
+  base64: string
+  mimeType: string
+}
 export interface ScriptParams extends ProviderParams {
   messages: Array<{ role: 'user' | 'assistant'; content: string }>
   systemPrompt?: string
   maxTokens?: number
+  /** Optional images attached to the last user message (vision-capable providers only). */
+  images?: ScriptImage[]
 }
 export interface ScriptResult { text: string }
 export interface ScriptProvider {
