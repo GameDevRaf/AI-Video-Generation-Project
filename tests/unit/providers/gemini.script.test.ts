@@ -38,4 +38,18 @@ describe('GeminiScriptProvider', () => {
       { inlineData: { data: 'IMG', mimeType: 'image/png' } },
     ])
   })
+
+  it('reserves a separate thinking budget so it cannot truncate the output', async () => {
+    mockGenerateContent.mockResolvedValueOnce({ text: 'ok' })
+    const { GeminiScriptProvider } = await import('../../../server/worker/providers/script/gemini')
+    await new GeminiScriptProvider().generate({
+      job: {} as never, apiKey: 'k', model: 'gemini-2.5-flash',
+      messages: [{ role: 'user', content: 'Write the motion prompt' }],
+      maxTokens: 1024,
+    })
+    const config = mockGenerateContent.mock.calls[0][0].config
+    // thinking gets its own budget, added on top of the caller's output budget
+    expect(config.thinkingConfig.thinkingBudget).toBeGreaterThan(0)
+    expect(config.maxOutputTokens).toBe(1024 + config.thinkingConfig.thinkingBudget)
+  })
 })
