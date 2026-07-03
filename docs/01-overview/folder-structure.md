@@ -1,0 +1,168 @@
+# Folder Structure
+
+Top-level view, then each folder in detail. Rule of thumb: **`app/` = browser, `server/` = Node backend, `shared/` = both.**
+
+```
+AI Video Generation Project/
+├── app/                    # Frontend (Vue) — runs in the browser
+├── server/                 # Backend (Nitro/Node) — API routes + background worker
+├── shared/                 # Pure logic imported by BOTH app/ and server/
+├── supabase/migrations/    # Database schema, numbered SQL files
+├── supabase-server.ts      # Server-side Supabase auth helpers (aliased as #supabase/server)
+├── tests/                  # Vitest unit/integration tests + Playwright E2E
+├── docs/                   # You are here (docs/old/ = outdated planning docs)
+├── public/                 # Static files served as-is (favicon etc.)
+├── assets/                 # CSS processed at build time (main.css with Tailwind)
+├── nuxt.config.ts          # Framework configuration
+├── package.json            # Dependencies + npm scripts
+├── tsconfig.json           # TypeScript config (strict!)
+├── vitest.config.ts        # Test runner config
+├── playwright.config.ts    # E2E test config
+└── CLAUDE.md               # Instructions for AI coding assistants
+```
+
+Vestigial items you can ignore: `components/`, `pages/`, `database/` at the root (empty leftovers — real ones live under `app/`), `test_db.ts`, `tmp-write-test.txt`, `test-results/` (Playwright output).
+
+## app/ — the frontend
+
+```
+app/
+├── app.vue                 # Root component — just renders the current page
+├── layouts/                # Page chrome (headers/nav) that pages opt into
+│   ├── default.vue         #   bare centered layout (landing/auth-ish pages)
+│   ├── dashboard.vue       #   top nav bar with Projects/Settings links + sign-out
+│   └── workspace.vue       #   editor chrome: back link, project name, tab slot, model-selector slot, timeline slot
+├── middleware/
+│   └── auth.ts             # Redirects to /auth/login when not signed in (pages opt in via definePageMeta)
+├── pages/                  # File-based routes (see pages-and-routing.md)
+│   ├── index.vue           #   /                landing page
+│   ├── dashboard.vue       #   /dashboard       project list
+│   ├── settings.vue        #   /settings        default providers + API key management
+│   ├── confirm.vue         #   /confirm         post-email-confirmation redirect target
+│   ├── auth/login.vue      #   /auth/login
+│   ├── auth/signup.vue     #   /auth/signup
+│   └── workspace/[projectId].vue  # /workspace/:id — THE main editor screen
+├── components/             # Auto-imported by folder-prefixed name
+│   ├── ProjectCard.vue             # <ProjectCard> — dashboard project tile
+│   ├── CreateProjectModal.vue      # <CreateProjectModal>
+│   ├── MediaPreviewModal.vue       # <MediaPreviewModal> — fullscreen image/video viewer + download
+│   ├── AudioPlayer.vue             # <AudioPlayer> — voice track player with per-scene highlighting
+│   ├── SettingsProviderRow.vue     # <SettingsProviderRow> — provider dropdown row on settings page
+│   ├── stages/                     # One component per pipeline stage + scene cards
+│   │   ├── ScriptStage.vue         # <StagesScriptStage> — idea/tone form, 3 candidates, editor
+│   │   ├── ScriptEditor.vue        # <StagesScriptEditor> — edit/refine a chosen script, "Use this script"
+│   │   ├── SceneSplitStage.vue     # <StagesSceneSplitStage> — split script into scene cards
+│   │   ├── SceneCard.vue           # <StagesSceneCard> — one editable scene row (move/delete)
+│   │   ├── NewSceneCard.vue        # <StagesNewSceneCard> — "+ add scene" button card
+│   │   ├── ImageStage.vue          # <StagesImageStage> — prompts + images grid
+│   │   ├── ImageSceneCard.vue      # <StagesImageSceneCard> — one scene's prompt/image/upload
+│   │   ├── AudioStage.vue          # <StagesAudioStage> — voice settings, per-scene TTS, combine
+│   │   ├── VideoStage.vue          # <StagesVideoStage> — motion prompts + clips grid + Skip Video Gen toggle
+│   │   ├── VideoSceneCard.vue      # <StagesVideoSceneCard> — one scene's motion prompt/clip/upload
+│   │   └── ExportStage.vue         # <StagesExportStage> — readiness stats, export button, download
+│   └── workspace/
+│       ├── StageTabs.vue           # <WorkspaceStageTabs> — Script/Image/Audio/Video tab bar with locking
+│       ├── ModelSelector.vue       # <WorkspaceModelSelector> — provider/model dropdown + inline key entry
+│       └── ProviderPanel.vue       # <WorkspaceProviderPanel> — slide-over panel for managing API keys
+├── composables/            # Reusable stateful functions, auto-imported (see composables.md)
+│   ├── useJobPoller.ts     #   submit one job + poll it to completion (used by every stage)
+│   ├── useProjects.ts      #   dashboard project list CRUD
+│   ├── useScenes.ts        #   scene list + edit/move/delete/create + timestamp recalculation
+│   ├── useImageStage.ts    #   image prompts + image URLs per scene
+│   ├── useVideoStage.ts    #   video prompts + video URLs per scene
+│   └── useAudioStage.ts    #   voice settings, voice catalog, existing voice track
+├── stores/                 # Pinia global state (see stores.md)
+│   ├── project.ts          #   current project + its settings + stage progression
+│   ├── workspace.ts        #   UI state: active script text, playback state
+│   └── jobs.ts             #   map of tracked jobs + multi-job polling (bulk generation)
+├── types/
+│   ├── database.types.ts   #   TypeScript interfaces mirroring every DB table (DbJob, DbScene, …)
+│   └── api.ts              #   request/response shapes for API routes (partially used)
+└── utils/
+    └── providerCatalog.ts  #   re-exports the provider catalog from server/ for frontend use
+```
+
+## server/ — the backend
+
+```
+server/
+├── api/                    # HTTP endpoints; file name = URL + method (see api-routes.md)
+│   ├── jobs/               #   POST create job (with dedup), GET list, GET one (with outputs)
+│   ├── projects/           #   CRUD + [id]/settings.patch
+│   ├── scenes/             #   GET list, POST create, PATCH/DELETE one, POST reorder
+│   ├── provider/           #   API key metadata: GET list, POST save (encrypts), DELETE
+│   ├── settings/           #   user-level default providers GET/PATCH
+│   ├── image-prompts/      #   GET latest per scene, PATCH edit one
+│   ├── video-prompts/      #   same for video prompts
+│   ├── images/             #   GET latest image URL per scene
+│   ├── videos/             #   GET latest video URL per scene
+│   ├── audio/              #   GET latest voice track, POST combine per-scene audio (ffmpeg)
+│   ├── uploads/            #   POST media.post.ts — user uploads own image/audio/video
+│   ├── exports/            #   GET export history
+│   ├── script.get.ts       #   GET the locked-in script text + original idea/tone
+│   └── test-db.ts          #   dev-only DB connectivity check
+├── plugins/
+│   └── worker.ts           # Nitro startup hook — starts the worker loop inside the dev server
+├── utils/                  # Server-only helpers (auto-imported in server/)
+│   ├── crypto.ts           #   AES-256-GCM encrypt/decrypt for provider API keys
+│   ├── ffmpeg.ts           #   run ffmpeg/ffprobe, transcode, download, duration probing
+│   └── mediaUpload.ts      #   upload validation (mime allow-list), label/path builders
+└── worker/                 # The background job processor
+    ├── index.ts            #   standalone entry point (npm run worker) — loads .env then starts loop
+    ├── loop.ts             #   poll → claim → dispatch → retry logic (3s interval, 3 retries)
+    ├── lib/
+    │   ├── supabase.ts     #   adminSupabase — service-role client (bypasses RLS)
+    │   ├── jobs.ts         #   updateJobStatus, storeTextOutput, storeFileOutput
+    │   └── getProviderKey.ts #  fetch + decrypt a user's provider API key
+    ├── handlers/           # One file per job type (see job-handlers.md)
+    │   ├── script.ts  scene_split.ts  image_prompt.ts  image.ts
+    │   ├── audio.ts   video_prompt.ts video.ts         export.ts
+    └── providers/          # Adapters for external AI services (see providers.md)
+        ├── types.ts        #   the four Provider interfaces + params/result shapes
+        ├── catalog.ts      #   PROVIDER_CATALOG — UI metadata, models, key sharing
+        ├── registry.ts     #   providerRegistry — id → adapter instance
+        ├── script/         #   anthropic, openai, gemini, groq, mistral, openrouter, huggingface
+        ├── image/          #   fal, openai_image, stability, ideogram, together_image, nanobanana, replicate, huggingface_image
+        ├── audio/          #   elevenlabs, openai_tts, playht, cartesia, fish_audio, gemini_tts, huggingface_audio
+        └── video/          #   runway, kling, luma, minimax, fal_video, veo, replicate_video, huggingface_video
+```
+
+## shared/ — code used by both sides
+
+```
+shared/
+├── config/videoFormat.ts   # VIDEO_FORMAT: 9:16, 1080×1920, 180s max — the single output format
+└── utils/scriptLength.ts   # countWords, estimateSpokenSeconds, targetWordCount (130 wpm math)
+```
+
+⚠️ Always import `shared/` files via **relative paths** (`'../../shared/config/videoFormat'`), never via an alias — the worker runs outside Nuxt and doesn't know Nuxt aliases.
+
+## supabase/migrations/ — database schema
+
+Numbered SQL files, run in order in the Supabase SQL editor. Never edit an already-applied migration — add a new numbered file. History:
+
+| # | Adds |
+|---|---|
+| 001 | Core tables: users, projects, jobs, job_outputs, scenes, scene_assets, project_settings, api_keys, connected_accounts + RLS |
+| 002 | `exports` table |
+| 003 | `user_settings` table |
+| 004 | Per-category provider columns on user_settings/project_settings |
+| 005 | Storage bucket `assets` |
+| 006 | `project_settings.skip_video_gen` |
+| 007 | `project_settings.target_duration_seconds` |
+| 008 | `project_settings.default_script_model` |
+
+## tests/
+
+```
+tests/
+├── unit/
+│   ├── utils/        # pure logic (crypto, script length, upload validation) — node env
+│   ├── stores/       # Pinia stores — nuxt env
+│   ├── providers/    # every provider adapter, HTTP mocked — node env
+│   └── components/   # a few component behavior tests
+├── integration/worker/   # every job handler with DB + providers mocked
+└── e2e/                  # Playwright browser tests (auth, navigation, happy path)
+```
+
+See [testing.md](../06-testing/testing.md).

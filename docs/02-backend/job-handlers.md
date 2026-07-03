@@ -1,0 +1,169 @@
+# Job Handlers
+
+One file per job type in `server/worker/handlers/`. Every handler is an exported async function `handle<Type>Job(job: DbJob): Promise<void>` registered in the `handlers` map in `loop.ts`.
+
+**Shared skeleton** (memorize this — every handler follows it):
+
+```ts
+export async function handleXJob(job: DbJob) {
+  const input = job.input as { ... }                        // 1. cast the JSON input
+  const providerId = input.provider ?? job.provider ?? <fallback>   // 2. resolve provider
+  const model = input.model ?? job.model ?? catalogDefault  // 3. resolve model
+  const apiKey = await getProviderKey(meta?.keyProviderId ?? providerId, job.user_id)  // 4. key
+  const result = await providerRegistry.<category>(providerId).generate({...})        // 5. call AI
+  await storeTextOutput(...) / storeFileOutput(...)         // 6. persist result
+  await updateJobStatus(job.id, 'completed', { completed_at, output_summary })        // 7. done
+}
+```
+
+Provider fallback for the LLM-based handlers (`script`, `scene_split`, `image_prompt`, `video_prompt`): when neither input nor job specifies one, they read `user_settings.default_script_provider`, defaulting to `'anthropic'`.
+
+Throwing anywhere = automatic retry (≤3) then `failed` — see [job-queue-and-worker.md](job-queue-and-worker.md).
+
+---
+
+## script.ts — `handleScriptJob`
+
+Generates voiceover script candidates from an idea, or refines an existing script.
+
+**Input** (`job.input`):
+| Field | Type | Meaning |
+|---|---|---|
+| `idea` | `string` | The video idea (generation mode) |
+| `tone` | `string` | e.g. "Educational" |
+| `existing_script` | `string?` | Presence switches to **refinement mode** |
+| `refinement_instructions` | `string?` | What to change (refinement mode) |
+| `target_duration_seconds` | `number?` | Target length; clamped to `VIDEO_FORMAT.maxDuration` (180); default 180 |
+| `provider`, `model` | `string?` | Overrides |
+
+**Behavior**: builds a word-count target (`targetWordCount`, 130 wpm). Generation mode asks for exactly **3** variations separated by `---SCRIPT_BREAK---`, spoken-words-only (no stage directions/brackets). Refinement returns one script.
+
+**Outputs**: `job_outputs` text rows labeled `script_candidate_1..3` (generation) or `script_refined` (refinement). `output_summary: { count, provider, model }`.
+
+**Internal helper** `resolveScriptProvider(job, inputProvider?)` — the provider fallback chain described above.
+
+---
+
+## scene_split.ts — `handleSceneSplitJob`
+
+Splits the locked-in script into scenes via an LLM and **replaces all rows in the `scenes` table**.
+
+**Input**: `{ script_text: string }` — ⚠️ this stored input also serves as the *system of record* for the final script (`GET /api/script` reads it back).
+
+**Behavior**:
+1. LLM prompt: split into scenes, return **JSON only** with schema `[{ title, script_text, duration }]`; `script_text` must be verbatim words from the input; duration estimated at 130 wpm.
+2. Response cleanup: strips markdown code fences, slices from first `[` to last `]`, then `JSON.parse` (a malformed LLM response throws → retry).
+3. **Deletes all existing scenes** for the project, then inserts new rows with cumulative `start_time`/`end_time` computed by walking durations, `scene_index = order_index = i`.
+
+**Outputs**: rows in `scenes` (not job_outputs). `output_summary: { scene_count, total_duration }`.
+
+---
+
+## image_prompt.ts — `handleImagePromptJob`
+
+LLM writes an image-generation prompt for each scene (or one scene).
+
+**Input**: `{ scene_id?: string }` — when set, only that scene's prompt is regenerated (other scenes' prompts remain, thanks to latest-wins reads).
+
+**Behavior**: loads scenes (`id, title, script_text`, ordered), sends them as JSON to the script-category LLM, expects JSON `[{ scene_id, prompt }]` back (same fence-tolerant extraction via internal `extractJsonArray`).
+
+**Outputs**: one text output per scene, label `image_prompt_scene_<sceneId>`. `output_summary: { prompt_count }`.
+
+---
+
+## image.ts — `handleImageJob`
+
+Generates **one image for one scene** via the selected image provider.
+
+**Input**:
+| Field | Type | Meaning |
+|---|---|---|
+| `scene_id` | `string` | Which scene |
+| `prompt` | `string` | The image prompt (already resolved by the frontend) |
+| `negative_prompt` | `string?` | Passed to providers that support it |
+| `provider`, `model` | `string?` | Overrides; fallback provider `'fal'` |
+
+**Behavior**: sets status `waiting_on_provider`, calls `providerRegistry.image(...)`. Result handling: Stability returns raw bytes (`rawBuffer`); every other provider returns a URL which is downloaded via the internal `downloadImageUrl(url)` helper.
+
+**Outputs**: file in Storage at `<projectId>/images/<sceneId>_<timestamp>.<ext>`, output labeled `scene_image_<sceneId>` with `metadata: { prompt }` (that stored prompt is what powers the "image is stale vs edited prompt" indicator in the UI).
+
+---
+
+## audio.ts — `handleAudioJob`
+
+Text-to-speech for one scene (usual case) or a whole script.
+
+**Input**:
+| Field | Type | Meaning |
+|---|---|---|
+| `script_text` | `string` | Text to speak |
+| `scene_id` | `string?` | Per-scene mode: labels output `scene_audio_<id>` and writes duration back to the scene. Absent: labels it `voice_track` |
+| `voice_id` | `string?` | Provider-specific voice; falls back to a per-provider default (`DEFAULT_VOICES` map in the file) |
+| `speed` | `number?` | Playback speed |
+| `provider`, `model` | `string?` | Overrides; fallback provider `'elevenlabs'` |
+
+**Behavior**: sets `waiting_on_provider`, generates audio (`Buffer` + mime), probes **actual duration** with ffprobe (`getBufferDurationSeconds`). In per-scene mode it immediately writes that duration onto the `scenes.duration` column so the frontend can recalculate all scene timestamps afterwards.
+
+**Outputs**: file at `<projectId>/audio/<jobId>_<timestamp>.mp3|wav`, label `scene_audio_<sceneId>` or `voice_track`, `metadata: { duration, scene_id }`. `output_summary` includes `duration_seconds`.
+
+---
+
+## video_prompt.ts — `handleVideoPromptJob`
+
+Same shape as image_prompt but for camera-motion prompts ("video director… under 100 words"). Input `{ scene_id?: string }`; outputs labeled `video_prompt_scene_<sceneId>`.
+
+---
+
+## video.ts — `handleVideoJob`
+
+Generates **one video clip for one scene**.
+
+**Input**:
+| Field | Type | Meaning |
+|---|---|---|
+| `scene_id` | `string` | Which scene |
+| `prompt` | `string` | Motion prompt |
+| `image_url` | `string?` | The scene's first-frame image — required by image-to-video providers (Runway throws without it) |
+| `duration` | `number?` | Target clip seconds (default 5) |
+| `provider`, `model` | `string?` | Overrides; fallback `'runway'` |
+
+**Behavior**: `waiting_on_provider` → provider call (most providers poll internally until the remote render finishes — can take minutes). Veo and HuggingFace return raw bytes; the rest return a URL that is downloaded.
+
+**Outputs**: file at `<projectId>/videos/<sceneId>_<timestamp>.mp4`, label `scene_video_<sceneId>`, `metadata: { prompt }`.
+
+---
+
+## export.ts — `handleExportJob`
+
+The finale: assembles all latest assets into one MP4 with ffmpeg. **No AI provider involved.** Unlike the other handlers, it handles its own failures with explicit `updateJobStatus(..., 'failed')` returns for expected problems (missing scenes/media).
+
+**Input**: `{}` (everything is looked up from the DB).
+
+**Pipeline**:
+1. Load scenes ordered by `order_index`; fail if none.
+2. Read `project_settings.skip_video_gen`. Collect the **latest** media per scene: videos (`scene_video_*`) or, in skip mode, images (`scene_image_*`). Fail listing how many scenes lack media.
+3. In a temp dir (always cleaned up in `finally`):
+   - **Normalize** each clip to 1280×720 @ 30fps H.264 (`normalizeVideo`); in skip mode, turn each image into a still clip held for the scene's duration (`imageToVideoClip` = 1-frame seed + `tpad` freeze-extend).
+   - **Concatenate** the normalized clips (ffmpeg concat demuxer, stream copy).
+   - **Resolve audio** (`getAudioForExport`): prefer per-scene audio (`scene_audio_*` for *every* scene → download in order, concat + re-encode to 44.1kHz stereo MP3); else fall back to the single latest `voice_track`; else no audio.
+   - If audio is **longer** than video by >0.5 s, freeze-extend the last video frame to match, so narration is never cut off.
+   - **Mux** video + audio (AAC, `+faststart`), or just finalize if no audio.
+4. Upload to Storage at `<projectId>/exports/<jobId>.mp4`.
+5. Insert a `job_outputs` row labeled `final_export_mp4` whose `metadata` is a **manifest** (version 2): mode, total duration, per-scene entries with times and media URLs.
+6. Insert a row into `exports`, update the project to `status: 'completed', current_stage: 'export'`, mark job completed.
+
+**Internal helpers** (all take/return local file paths; ffmpeg arg-building lives here rather than in `utils/ffmpeg.ts`):
+| Function | Purpose |
+|---|---|
+| `getLatestSceneVideos / getLatestSceneImages / getSceneAudioUrls (projectId, sceneIds)` | latest-wins maps `sceneId → storage_url` from job_outputs labels |
+| `getVoiceTrackUrl(projectId)` | newest `voice_track` URL or null |
+| `getSkipVideoGen(projectId)` | reads the project setting |
+| `getAudioForExport(projectId, sceneRows, tempDir)` | the audio resolution described above; returns a local path or null |
+| `normalizeVideo(in, out)` | scale/pad to 1280×720, 30fps, strip audio |
+| `concatVideos(listPath, out)` | concat demuxer, `-c copy` |
+| `muxAudio(video, audio, out)` | combine streams, `-shortest` |
+| `finalizeVideo(in, out)` | remux with `+faststart` only |
+| `freezeExtendVideo(in, extraSeconds, out)` | `tpad=stop_mode=clone` last-frame hold |
+| `imageToVideoClip(image, duration, seedPath, out)` | still image → held clip |
+
+> ⚠️ Note the 1280×720 normalization is **landscape**, while the rest of the app targets 9:16 vertical (`VIDEO_FORMAT`). Vertical source clips get pillarboxed. See the architecture doc's "known format inconsistency" note before changing this.

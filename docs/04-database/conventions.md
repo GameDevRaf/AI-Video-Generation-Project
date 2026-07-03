@@ -1,0 +1,66 @@
+# Data Conventions
+
+The unwritten rules that make the whole system hang together. **Breaking any of these silently breaks features** — read this before adding anything that creates or reads generated assets.
+
+## 1. The `label` addressing scheme
+
+`job_outputs.label` is how assets are found. There is no "current image" column anywhere — the label + newest-first ordering *is* the lookup mechanism.
+
+| Label | Type | Written by | Read by |
+|---|---|---|---|
+| `script_candidate_1..3` | text | script handler (generation) | ScriptStage (from the polled job directly) |
+| `script_refined` | text | script handler (refinement) | ScriptEditor |
+| `image_prompt_scene_<sceneId>` | text | image_prompt handler | `GET /api/image-prompts` |
+| `video_prompt_scene_<sceneId>` | text | video_prompt handler | `GET /api/video-prompts` |
+| `scene_image_<sceneId>` | image | image handler **and** uploads | `GET /api/images`, export handler |
+| `scene_video_<sceneId>` | video | video handler **and** uploads | `GET /api/videos`, export handler |
+| `scene_audio_<sceneId>` | audio | audio handler (per-scene mode) | `/api/audio/combine`, export handler |
+| `voice_track` | audio | audio handler (whole-script mode), `/api/audio/combine`, audio uploads | `GET /api/audio`, export fallback |
+| `final_export_mp4` | video | export handler | (exports table points at the same URL) |
+
+Scene ids are embedded **in the label string** and parsed back out with `label.replace('scene_image_', '')` etc. If you add a new per-scene asset type, follow the exact pattern `thing_scene_<sceneId>` or `scene_thing_<sceneId>` consistently and add it to this table.
+
+## 2. "Latest wins" — regeneration never overwrites
+
+Generating again **inserts a new row** with the same label. Every reader:
+
+```ts
+.order('created_at', { ascending: false })   // newest first
+// then keep only the FIRST row seen per sceneId
+```
+
+Consequences:
+- History is preserved for free (old images still exist in Storage + DB).
+- Any new read path **must** dedupe newest-per-label — copying an existing endpoint (e.g. `images/index.get.ts`) is the safest way.
+- User uploads participate identically because they use the same labels — an uploaded image simply becomes "the latest" for that scene.
+
+## 3. Job dedup (double-submit protection)
+
+`POST /api/jobs` returns an existing `queued`/`processing` job of the same project + type + `input.scene_id` instead of inserting. Two implications for new code:
+
+- Always put the scene id in `input.scene_id` (that exact key) for per-scene jobs, or dedup won't scope correctly.
+- The frontend cannot assume "POST created a fresh job" — it may get a job that's already mid-flight. All current flows handle this naturally by just polling whatever id comes back.
+
+## 4. Text outputs live in `metadata.content`
+
+Text results (scripts, prompts) are **not** files: `storage_url` is null and the text is at `metadata.content`. Prompt editing PATCHes replace `metadata` with `{ content: newText }` — if you ever store more keys in a text output's metadata, update the PATCH routes to merge instead of replace.
+
+Similarly, generated media stores its generation prompt in `metadata.prompt` — that's what staleness dots compare against. Audio stores `metadata.duration` and the combine step stores `metadata.scene_snapshot`.
+
+## 5. Scene timing is client-computed
+
+`start_time`/`end_time` are always derived: cumulative sums of `duration` in `order_index` order, computed by `useScenes.recalcTimestamps` and persisted via `/api/scenes/reorder`. The server never recomputes them. If you change durations or order in new code, you **must** recalc + persist, or the AudioPlayer highlighting and export manifest drift. (Exception: the audio handler writes the *measured* `duration` per scene; the frontend then recalcs timestamps after all audio jobs finish.)
+
+## 6. Provider/model resolution order
+
+Everywhere: `job.input.provider` → `job.provider` → `project_settings.default_<cat>_provider` → `user_settings.default_<cat>_provider` → hardcoded default (`anthropic` / `fal` / `elevenlabs` / `runway`). Same for models, ending at the catalog's `defaultModel`. (LLM-ish handlers skip the project_settings step and go straight to user_settings — the frontend passes the project's provider in `input` anyway.)
+
+And for API keys, always look up under `catalogEntry.keyProviderId ?? providerId` — Veo, Nano Banana and Gemini TTS share the `gemini` key; HF variants share `huggingface`; `replicate_video` shares `replicate`.
+
+## 7. The script's system of record is a job input
+
+There is no `projects.script` column. The finalized script is whatever `script_text` was passed to the **newest `scene_split` job** (`GET /api/script` reads it from there). If you build anything needing the final script, read it the same way — or migrate to a proper column and update both.
+
+## 8. Stage gating
+
+`projects.current_stage` only ever moves **forward** via the stage-done handlers in the workspace page. Tabs unlock at ≥ their stage. Nothing prevents re-running earlier stages (that's a feature — regeneration), but be aware downstream assets go stale; the staleness dots (image/video prompt mismatch, audio scene snapshot) are the only warnings users get.

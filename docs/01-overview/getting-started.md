@@ -1,0 +1,94 @@
+# Getting Started
+
+## Prerequisites
+
+| Tool | Why it's needed | Python analogy |
+|---|---|---|
+| **Node.js** (v20+) | Runs all JavaScript/TypeScript code, both server and build tools | The Python interpreter |
+| **npm** (comes with Node) | Installs dependencies listed in `package.json` | `pip` + `requirements.txt` |
+| **ffmpeg + ffprobe** on your PATH | Audio/video concatenation, transcoding, duration probing | A CLI tool called via `subprocess` |
+| **A Supabase project** | Hosted Postgres database + auth + file storage | Postgres + a `users` service + S3, bundled |
+
+The project also uses **Bun's lockfile** (`bun.lock`) alongside `package-lock.json`; either `npm install` or `bun install` works. The scripts below use npm.
+
+## 1. Install dependencies
+
+```bash
+npm install
+```
+
+This reads `package.json` and downloads every library into `node_modules/` (like a venv's `site-packages`). You never edit `node_modules/`.
+
+## 2. Environment variables (`.env`)
+
+Create a `.env` file in the project root. The server reads it automatically (the standalone worker loads it via the `dotenv` package).
+
+```bash
+# Supabase — Dashboard > Project Settings > API
+SUPABASE_URL=https://<your-project>.supabase.co
+NUXT_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co   # same value, exposed to the browser
+SUPABASE_KEY=<anon public key>
+NUXT_PUBLIC_SUPABASE_KEY=<anon public key>                     # same value, exposed to the browser
+SUPABASE_SERVICE_ROLE_KEY=<service_role key>                   # SECRET — bypasses all DB security. Server only.
+
+# Optional: only used by provider integration tests (tests/unit/providers)
+TEST_GEMINI_API_KEY=...
+TEST_GROQ_API_KEY=...
+TEST_FALAI_API_KEY=...
+TEST_OPENROUTER_API_KEY=...
+TEST_STABILITYAI_API_KEY=...
+TEST_ELEVENLABS_API_KEY=...
+```
+
+Notes:
+
+- The `NUXT_PUBLIC_*` variants are what the browser-side Supabase client uses; the plain ones are for the server. Keep them in sync.
+- `SUPABASE_SERVICE_ROLE_KEY` does double duty: it authenticates the worker's admin database client **and** it is the secret from which the AES key for encrypting users' provider API keys is derived (see [server-utils.md](../02-backend/server-utils.md#cryptots)). Changing it makes previously stored provider keys undecryptable.
+- End-user AI provider keys (Anthropic, ElevenLabs, Runway, …) are **not** environment variables. Users paste them in the UI and they're stored encrypted in the `api_keys` table.
+
+## 3. Set up the database
+
+Run each SQL file in `supabase/migrations/` **in numeric order** (001 → 008) in the Supabase Dashboard → SQL Editor. This creates all tables, row-level-security policies, and the `assets` storage bucket. See [schema.md](../04-database/schema.md).
+
+## 4. Run the app (two processes)
+
+Development needs **two terminals**:
+
+```bash
+# Terminal 1 — the web app (http://localhost:3000)
+npm run dev
+
+# Terminal 2 — the background job worker (hot-reloads on file changes)
+npm run worker:watch
+```
+
+Why two? The web app answers HTTP requests quickly; the worker does the slow AI-provider calls (a video generation can take 2 minutes). They communicate only through the `jobs` table in the database — like a Python web app plus a Celery worker sharing a task queue.
+
+> Technically the Nuxt dev server *also* starts an embedded worker loop via `server/plugins/worker.ts` (guarded so it only starts once per process). The standalone `worker:watch` process exists so the worker can run and be restarted independently — in practice run both, it's harmless: whichever process claims a job first processes it.
+
+## All commands
+
+```bash
+npm run dev              # Nuxt dev server on localhost:3000
+npm run worker           # run worker once (no reload)
+npm run worker:watch     # worker with hot-reload
+npm run build            # production build
+npm run preview          # serve the production build locally
+
+npm run test             # all unit + integration tests (Vitest)
+npm run test:unit        # tests/unit only
+npm run test:integration # tests/integration only (worker handlers)
+npm run test:watch       # Vitest watch mode
+npm run test:coverage    # coverage report
+npm run test:e2e         # Playwright end-to-end tests (needs dev server running)
+npm run test:e2e:ui      # Playwright with visual UI
+
+npx nuxi typecheck       # full TypeScript check (app + server). Run after significant changes.
+```
+
+## First run, as a user
+
+1. Open `http://localhost:3000` → Sign up (Supabase email auth) → you land on the dashboard.
+2. Create a project → you enter the **workspace** (`/workspace/<projectId>`).
+3. In the top-right **model selector**, pick a script provider and paste an API key for it when prompted (stored encrypted).
+4. Follow the tabs left to right: **Script → Image → Audio → Video** (Export appears inside the Video tab).

@@ -1,0 +1,112 @@
+# Job Queue & Worker
+
+The worker is the process that actually performs AI generation. It lives in `server/worker/` and communicates with the rest of the app **only through the database**.
+
+## Entry points (two ways the loop starts)
+
+| File | When |
+|---|---|
+| `server/worker/index.ts` | Standalone process: `npm run worker` / `npm run worker:watch`. Loads `.env` via `dotenv` **before** importing anything else (that's why it uses a dynamic `import('./loop')` — top-level imports would read `process.env` too early). |
+| `server/plugins/worker.ts` | Nitro plugin — auto-starts the loop **inside the Nuxt server process** at startup. Wrapped in try/catch so a worker failure can't kill the web server. |
+
+Both call `startWorkerLoop()`, which is guarded by a `globalThis.__workerStarted` flag so hot-reloads / double-imports never start two loops **in the same process**. Running the dev server *and* the standalone worker means two pollers exist across processes — that's fine, job claiming is race-safe (below).
+
+## server/worker/loop.ts
+
+Constants: `POLL_INTERVAL_MS = 3000`, `MAX_RETRIES = 3`.
+
+### `startWorkerLoop(): void`
+Public entry. Sets the once-only flag, runs one `tick()` immediately, then `setInterval(tick, 3000)`.
+
+### `tick(): Promise<void>` *(internal)*
+One poll cycle: claim a job → process it. All errors are caught and logged so the interval never dies.
+
+### `claimNextJob(): Promise<DbJob | null>` *(internal)*
+1. Selects the single **oldest** row from `jobs` with `status IN ('queued','retrying')` (ordered by `created_at`).
+2. Attempts to claim it: `UPDATE jobs SET status='processing', started_at=now() WHERE id=<candidate> AND status IN ('queued','retrying')`.
+
+The conditional `WHERE status IN (...)` on the update is the concurrency guard: if another worker process claimed it between the select and the update, the update matches nothing and this function returns `null` — nobody processes a job twice.
+
+- Returns: the claimed job row, or `null` if the queue is empty / lost the race.
+
+### `processJob(job: DbJob): Promise<void>` *(internal)*
+Looks up the handler in the `handlers` map (one entry per `JobType`; `music` and `publish` immediately fail with "not yet implemented"). Runs it inside try/catch:
+
+- Handler resolves → the handler itself already set status `completed`.
+- Handler throws → if `retry_count + 1 <= 3`: status → `retrying` (picked up again next tick, so retry delay ≈ 3 s), else → `failed` with `error_message`.
+
+⚠️ Retries re-run the **whole** handler. Handlers are written to tolerate this (outputs are insert-only "latest wins" rows; scene_split deletes-then-reinserts), but keep it in mind when writing a new handler — avoid non-idempotent side effects before the point of likely failure.
+
+## server/worker/lib/supabase.ts
+
+### `adminSupabase: SupabaseClient` *(constant)*
+Service-role Supabase client built from `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (throws at import time if either is missing). **Bypasses all Row-Level Security** — the worker has no user cookie, so it needs this. Never import it into code paths where the user's identity hasn't already been verified.
+
+## server/worker/lib/jobs.ts
+
+### `updateJobStatus(jobId, status, extras = {}): Promise<void>`
+Updates a job row's status + `updated_at`.
+
+| Param | Type | Meaning |
+|---|---|---|
+| `jobId` | `string` | Job UUID |
+| `status` | `JobStatus` | `queued · processing · waiting_on_provider · completed · failed · retrying` |
+| `extras` | object | Optional columns to set alongside: `error_message`, `output_summary`, `started_at`, `completed_at`, `retry_count` |
+
+Returns nothing; a DB error is only logged (status updates are best-effort — deliberately never throw so they can't mask the original handler error).
+
+### `storeTextOutput(job, content, label): Promise<string>`
+Inserts a `job_outputs` row for a **text** result. The text lives in `metadata.content` (no file storage involved).
+
+| Param | Type | Meaning |
+|---|---|---|
+| `job` | `DbJob` | Source job (provides `job_id` and `project_id`) |
+| `content` | `string` | The text itself |
+| `label` | `string` | Naming-convention label, e.g. `script_candidate_1`, `image_prompt_scene_<sceneId>` — see [conventions.md](../04-database/conventions.md) |
+
+Returns the new output row's id. Throws on DB error.
+
+### `storeFileOutput(job, fileBuffer, storagePath, type, label, mimeType, metadata?): Promise<{ outputId, storageUrl }>`
+Uploads a binary file to the Supabase Storage bucket **`assets`** (upsert), gets its public URL, and inserts a `job_outputs` row referencing it.
+
+| Param | Type | Meaning |
+|---|---|---|
+| `job` | `DbJob` | Source job |
+| `fileBuffer` | `Buffer` | Raw file bytes |
+| `storagePath` | `string` | Bucket path, convention: `<projectId>/<images|audio|videos|exports>/<name>.<ext>` |
+| `type` | `OutputType` | `image`, `audio`, `video`, … |
+| `label` | `string` | e.g. `scene_image_<sceneId>` |
+| `mimeType` | `string` | e.g. `image/png` |
+| `metadata` | object? | Extra JSON stored on the row (e.g. `{ prompt }`, `{ duration }`) |
+
+Returns `{ outputId, storageUrl }`. Throws on upload or insert failure.
+
+## server/worker/lib/getProviderKey.ts
+
+### `getProviderKey(provider, userId): Promise<string>`
+Fetches the **newest active** `api_keys` row for that user+provider, decrypts `encrypted_secret` with `server/utils/crypto.ts`, returns the plaintext key.
+
+| Param | Type | Meaning |
+|---|---|---|
+| `provider` | `string` | The **key** provider id. Callers must pass `catalogEntry.keyProviderId ?? providerId` so shared-key providers (veo/nanobanana/gemini_tts → `gemini`) resolve correctly |
+| `userId` | `string` | Whose key to fetch |
+
+Throws `No active API key found for provider "X". Add one in Settings → API Keys.` when absent — this message surfaces directly in the UI as the job error, so keep it user-friendly if you edit it.
+
+For dual-credential providers (Kling, PlayHT) the "key" is a JSON string like `{"access":"...","secret":"..."}` — the provider adapter parses it.
+
+## Job status lifecycle
+
+```
+            POST /api/jobs                    handler throws (≤3 retries)
+   (client) ────────────► queued ──claim──► processing ─────────► retrying ──┐
+                             ▲                  │  │                          │ re-claimed
+                             └──────────────────┼──┴──────────────────────────┘
+                     slow provider call:        │
+                     waiting_on_provider ◄──────┤ (image/audio/video handlers set this
+                             │                  │  before calling the provider)
+                             ▼                  ▼
+                         completed           failed  (after 4th attempt, with error_message)
+```
+
+Frontend treats `queued`, `processing`, `retrying` (and implicitly `waiting_on_provider`) as "running"; `completed`/`failed` are terminal.

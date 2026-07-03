@@ -1,0 +1,125 @@
+# Components
+
+Every component in `app/components/`, documented by its **contract**: purpose, props (inputs), emits (events up), and behavior notes. Nuxt auto-imports them with folder-prefixed names (`stages/ImageStage.vue` → `<StagesImageStage>`).
+
+Recurring conventions across stage components:
+
+- Props down / emits up — parents pass data, children emit events; children never mutate parent data.
+- Every stage takes `projectId: string` and emits `done: []` when the user clicks "Continue →" (the workspace page advances the stage).
+- Single AI actions use `useJobPoller`; bulk actions use the jobs store with per-job polling and a `remaining` countdown.
+- **Orange dot pattern**: cards show a small orange dot when the saved media is stale relative to its prompt/text. The state is snapshotted once when `dataLoaded` flips true (on mount/tab return), so the dot never flickers mid-edit.
+
+---
+
+## Top-level components
+
+### ProjectCard.vue — `<ProjectCard>`
+Dashboard tile: name, description, stage, relative "updated Xm ago" time.
+**Props**: `project: ProjectWithSettings`. **Emits**: `delete: [id]`. Clicking navigates to the workspace.
+
+### CreateProjectModal.vue — `<CreateProjectModal>`
+Name + description form; calls `useProjects().createProject`.
+**Emits**: `close: []`, `created: [projectId]` (dashboard navigates to the new workspace).
+
+### MediaPreviewModal.vue — `<MediaPreviewModal>`
+Fullscreen viewer for an image or video with a download button (fetch → blob → anchor download, so cross-origin storage URLs download instead of opening).
+**Props**: `open: boolean`, `url: string`, `type: 'image' | 'video'`, `title?`, `downloadName?`. **Emits**: `close: []`.
+
+### AudioPlayer.vue — `<AudioPlayer>`
+Plays the combined voice track. Renders a timeline segmented per scene, highlights the scene under the playhead (using scene `start_time`/`end_time`), supports seek/playback-rate/download.
+**Props**: `audioUrl: string`, `scenes: DbScene[]`, `sceneImages?: Map<string, string>`.
+
+### SettingsProviderRow.vue — `<SettingsProviderRow>`
+One labeled provider `<select>` row on the settings page.
+**Props**: `label`, `description`, `providers: ProviderMeta[]`, `selectedProviderId`. **Emits**: `providerChange: [value]`.
+
+---
+
+## workspace/ components
+
+### StageTabs.vue — `<WorkspaceStageTabs>`
+The Script/Image/Audio/Video tab bar. Tabs unlock progressively: a tab is enabled when `currentStage` has reached it in `STAGE_ORDER` (`script → scene_split → image → audio → video → export`). Exports `type TabId`.
+**Props**: `activeTab: TabId`, `currentStage: string`. **Emits**: `update:activeTab: [tab]`.
+
+### ModelSelector.vue — `<WorkspaceModelSelector>`
+The provider/model dropdown in the workspace header. The most intricate small component:
+- Lists providers for the current stage from the catalog, with "✓ key saved" / "+ key needed" badges (checked against `keyProviderId ?? id`).
+- Picking a provider **without** a saved key opens an inline paste-your-key form; saving POSTs `/api/provider/keys` under the shared key id, then selects the provider.
+- A model `<select>` appears when the provider has >1 model.
+- A watcher re-evaluates selection when the stage/tab changes, when the project's saved provider arrives, or when the key list changes — preferring `initialProviderId`, else the first provider with a saved key, else the stage default (`anthropic/fal/elevenlabs/runway`). It emits on every re-evaluation so `projectStore.settings` is always in sync before any Generate button is pressed.
+
+**Props**: `stage: 'script'|'image'|'audio'|'video'`, `savedProviderIds: string[]`, `initialProviderId?`, `initialModelId?`.
+**Emits**: `providerChanged: [providerId, modelId]` (workspace page persists to project settings), `openKeyPanel: []`.
+
+### ProviderPanel.vue — `<WorkspaceProviderPanel>`
+Slide-over panel for full API-key management (all categories): list keys, add for any provider, delete.
+**Props**: `open: boolean`. **Emits**: `close: []`.
+
+---
+
+## stages/ components
+
+### ScriptStage.vue — `<StagesScriptStage>`
+The Script tab. Two modes:
+- **Locked** (`projectStore.currentStage !== 'script'`): read-only summary of idea + finalized script (restores idea/tone from `GET /api/script`).
+- **Normal**: idea textarea, tone select, target-length preset buttons (15s/30s/60s/90s/3m — persisted to `project_settings.target_duration_seconds`), Generate button → `script` job via `useJobPoller`. Renders the 3 candidates from `job.job_outputs` with estimated spoken duration badges; selecting one mounts `<StagesScriptEditor>`.
+
+**Props**: `projectId`. **Emits**: `done` (after the editor's "Use this script").
+
+### ScriptEditor.vue — `<StagesScriptEditor>`
+Edit the chosen script; word count with over-target warning; a "Refine" sub-form that runs a refinement `script` job (`existing_script` + `refinement_instructions`) and replaces the text; "Use this script" stores the text in the workspace store and emits `use`.
+**Props**: `projectId`, `initialText`, `outputId`. **Emits**: `use: [text]`, `regenerate: []`.
+
+### SceneSplitStage.vue — `<StagesSceneSplitStage>`
+Shown inside the Script tab once locked. "Split into scenes" runs a `scene_split` job with the active script text, then `fetchScenes()`. Renders `<StagesSceneCard>` list (animated reorder via `TransitionGroup`) + `<StagesNewSceneCard>`. All scene mutations delegate to `useScenes`.
+**Props**: `projectId`, `scriptText`. **Emits**: `done`.
+
+### SceneCard.vue — `<StagesSceneCard>`
+One editable scene row: title, script text, duration, time range; move up/down arrows; delete (with `confirm()`, blocked when it's the only scene).
+**Props**: `scene: DbScene`, `isFirst`, `isLast`, `isOnly?`. **Emits**: `update: [id, patch]`, `move: [id, 'up'|'down']`, `delete: [id]`.
+
+### NewSceneCard.vue — `<StagesNewSceneCard>`
+Dashed "+ Add scene" card. **Props**: `creating?`. **Emits**: `create: []`.
+
+### ImageStage.vue — `<StagesImageStage>`
+The Image tab. Data via `useScenes` + `useImageStage`. Actions:
+- **Generate all prompts** → one `image_prompt` job (useJobPoller) → refetch prompts on completion.
+- **Regenerate one prompt** → `image_prompt` job with `input.scene_id` (separate poller).
+- **Generate one image** → `image` job with `{ scene_id, prompt, provider?, model? }` (provider/model from project settings).
+- **Generate all images** → bulk pattern: `jobsStore.createJob` per scene-with-prompt + `startPolling` each; refetches images as each completes; button re-enables when `remaining` hits 0; partial failures show "Some images failed".
+- **Upload image** → multipart POST `/api/uploads/media`.
+- Preview modal wiring.
+
+**Props**: `projectId`, `promptEditMode?` (badge only — `before_generation` vs `after_generation` workflow hint). **Emits**: `done`.
+
+### ImageSceneCard.vue — `<StagesImageSceneCard>`
+One scene's card in the image grid: image preview (or placeholder), editable prompt textarea with save-on-dirty, generate/regenerate button, per-card upload, view. Orange staleness dot when the current image's `generationPrompt` differs from the saved prompt (snapshotted at `dataLoaded`).
+**Props**: `scene`, `prompt`, `hasPrompt`, `imageUrl`, `generationPrompt?`, `dataLoaded?`, `generating`, `generatingPrompt`, `uploading?`, `providerError?`.
+**Emits**: `save-prompt: [sceneId, prompt]`, `generate-image: [sceneId, prompt]`, `regenerate-prompt: [sceneId]`, `upload-image: [sceneId, File]`, `view-image: [sceneId]`.
+
+### AudioStage.vue — `<StagesAudioStage>`
+The Audio tab. Owns the **most custom orchestration** (doesn't fit useJobPoller because it's N jobs + a combine step):
+1. Voice settings UI (provider tabs limited to ElevenLabs/OpenAI TTS, voice grid, speed/stability/clarity sliders) via `useAudioStage`.
+2. **Generate** fires one `audio` job per scene in parallel (`Promise.allSettled`), tracks ids in `jobState { total, completed, failed, pendingIds }`, polls them with a hand-rolled 2 s `setTimeout` loop (`pollAudioJobs`).
+3. When all settle (`onAllAudioJobsComplete`): calls `POST /api/audio/combine` → refetches the voice track (fresh `scene_snapshot` clears the staleness dot) → refetches scenes (worker wrote real durations) → `recalcTimestamps` + `persistTimestamps`.
+4. **Upload audio** replaces the voice track and proportionally redistributes scene durations to match the uploaded file's length (duration detected via an `Audio` element).
+5. Orange **mismatch dot** on the Generate button when current scene text/order differs from `generationSnapshot`.
+
+**Props**: `projectId`. **Emits**: `done`.
+
+### VideoStage.vue — `<StagesVideoStage>`
+The Video tab. Same structure as ImageStage (prompt job / bulk video jobs / single video job / upload / preview) plus:
+- Video jobs include `image_url` (the scene's image, for image-to-video) and `duration` (scene seconds).
+- **Skip Video Gen toggle** → `projectStore.updateSettings({ skip_video_gen })`, with error rollback message.
+- A horizontal storyboard strip of scene thumbnails when any video exists.
+
+**Props**: `projectId`. **Emits**: `done`.
+
+### VideoSceneCard.vue — `<StagesVideoSceneCard>`
+Per-scene video card: clip preview (falls back to showing the scene image), editable motion prompt, generate/upload/view, active-scene highlight, staleness dot.
+**Props**: `scene`, `prompt`, `videoUrl`, `imageUrl`, `generationPrompt?`, `dataLoaded?`, `isActive`, `generating`, `generatingPrompt?`, `uploading?`, `providerError?`.
+**Emits**: `save-prompt`, `generate-video`, `regenerate-prompt`, `select`, `upload-video`, `view-video` (same shapes as the image card).
+
+### ExportStage.vue — `<StagesExportStage>`
+Shown in the Video tab at the `export` stage. Readiness stat tiles (scenes / duration / audio / videos-or-images depending on `skip_video_gen`); Export button (disabled until media exists) → `export` job via useJobPoller; on completion reloads export history (`GET /api/exports`) and current media; shows the latest export with asset checklist, MP4 preview/download, and manifest JSON download (client-side blob).
+**Props**: `projectId`. **Emits**: none (terminal stage).
