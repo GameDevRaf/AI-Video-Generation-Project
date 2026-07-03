@@ -53,6 +53,10 @@ const MOCK_VIDEOS = [
   { label: 'scene_video_sc-1', storage_url: 'https://cdn/v1.mp4' },
   { label: 'scene_video_sc-2', storage_url: 'https://cdn/v2.mp4' },
 ]
+const MOCK_IMAGES = [
+  { label: 'scene_image_sc-1', storage_url: 'https://cdn/i1.png' },
+  { label: 'scene_image_sc-2', storage_url: 'https://cdn/i2.png' },
+]
 const MOCK_PER_SCENE_AUDIO = [
   { label: 'scene_audio_sc-1', storage_url: 'https://cdn/a1.mp3' },
   { label: 'scene_audio_sc-2', storage_url: 'https://cdn/a2.mp3' },
@@ -77,7 +81,7 @@ const BASE_JOB = { id: 'job-exp-1', project_id: 'proj-1', user_id: 'user-1' }
 
 /** Wire up adminSupabase.from() calls for a typical export run.
  *  job_outputs is called up to 4 times in order:
- *   1. getLatestSceneVideos → videos
+ *   1. getLatestSceneVideos/getLatestSceneImages → videos or images (depending on skipVideoGen)
  *   2. getSceneAudioUrls   → perSceneAudio
  *   3. getVoiceTrackUrl    → voiceTrack (only reached if perSceneAudio is incomplete)
  *   4+ insert calls        → insertResult
@@ -85,13 +89,16 @@ const BASE_JOB = { id: 'job-exp-1', project_id: 'proj-1', user_id: 'user-1' }
 function setupFromMock({
   perSceneAudio = [] as unknown[],
   voiceTrack = null as { storage_url: string } | null,
+  skipVideoGen = false,
+  images = MOCK_IMAGES as unknown[],
 } = {}) {
   let jobOutputsCall = 0
   mockAdminFrom.mockImplementation((table: string) => {
     if (table === 'scenes') return chain({ data: MOCK_SCENES, error: null })
+    if (table === 'project_settings') return chain({ data: { skip_video_gen: skipVideoGen }, error: null })
     if (table === 'job_outputs') {
       jobOutputsCall++
-      if (jobOutputsCall === 1) return chain({ data: MOCK_VIDEOS, error: null })
+      if (jobOutputsCall === 1) return chain({ data: skipVideoGen ? images : MOCK_VIDEOS, error: null })
       if (jobOutputsCall === 2) return chain({ data: perSceneAudio, error: null })
       if (jobOutputsCall === 3) return chain({ data: voiceTrack, error: null }) // voice_track fallback
       return chain({ data: null, error: null }) // insert calls
@@ -225,5 +232,76 @@ describe('export handler — freeze-frame failsafe', () => {
     expect(mockUpdateJobStatus).toHaveBeenCalledWith('job-exp-1', 'failed', expect.objectContaining({
       error_message: expect.stringContaining('Missing video'),
     }))
+  })
+})
+
+describe('export handler — Skip Video Gen (images-only)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetFileDurationSeconds.mockResolvedValue(10)
+  })
+
+  it('uses generated video clips (not images) when skip_video_gen is disabled', async () => {
+    setupFromMock({ perSceneAudio: MOCK_PER_SCENE_AUDIO, skipVideoGen: false })
+    const { handleExportJob } = await import('../../../server/worker/handlers/export')
+    await handleExportJob(BASE_JOB as never)
+
+    expect(mockDownloadToFile).toHaveBeenCalledWith('https://cdn/v1.mp4', expect.any(String))
+    expect(mockDownloadToFile).not.toHaveBeenCalledWith('https://cdn/i1.png', expect.any(String))
+    // No single-frame seed extraction (image path) should occur
+    const seedCall = mockRunFfmpeg.mock.calls.find((args: string[][]) => args[0]?.includes('-frames:v'))
+    expect(seedCall).toBeUndefined()
+  })
+
+  it('downloads scene images and builds a slideshow when skip_video_gen is enabled', async () => {
+    setupFromMock({ perSceneAudio: MOCK_PER_SCENE_AUDIO, skipVideoGen: true })
+    const { handleExportJob } = await import('../../../server/worker/handlers/export')
+    await handleExportJob(BASE_JOB as never)
+
+    // Images downloaded instead of videos
+    expect(mockDownloadToFile).toHaveBeenCalledWith('https://cdn/i1.png', expect.any(String))
+    expect(mockDownloadToFile).toHaveBeenCalledWith('https://cdn/i2.png', expect.any(String))
+    expect(mockDownloadToFile).not.toHaveBeenCalledWith('https://cdn/v1.mp4', expect.any(String))
+
+    // Each image is seeded to a single-frame clip...
+    const seedCalls = mockRunFfmpeg.mock.calls.filter((args: string[][]) => args[0]?.includes('-frames:v'))
+    expect(seedCalls).toHaveLength(2)
+
+    // ...then held for the scene's full duration (5s, from MOCK_SCENES) via the same
+    // tpad freeze-frame extend used for the video-generation failsafe.
+    const tpadCalls = mockRunFfmpeg.mock.calls.filter((args: string[][]) =>
+      args[0]?.some(a => typeof a === 'string' && a.includes('tpad=stop_mode=clone')),
+    )
+    const holdCalls = tpadCalls.filter((args: string[][]) => {
+      const arg = args[0].find((a: string) => a.includes('tpad=stop_mode=clone'))
+      return arg?.includes('stop_duration=5.000')
+    })
+    expect(holdCalls).toHaveLength(2)
+
+    expect(mockUpdateJobStatus).toHaveBeenCalledWith('job-exp-1', 'completed', expect.objectContaining({
+      output_summary: expect.objectContaining({ mode: 'images_only' }),
+    }))
+  })
+
+  it('marks job failed when scene images are missing and skip_video_gen is enabled', async () => {
+    // Only one image but two scenes
+    setupFromMock({ perSceneAudio: MOCK_PER_SCENE_AUDIO, skipVideoGen: true, images: [MOCK_IMAGES[0]!] })
+    const { handleExportJob } = await import('../../../server/worker/handlers/export')
+    await handleExportJob(BASE_JOB as never)
+
+    expect(mockUpdateJobStatus).toHaveBeenCalledWith('job-exp-1', 'failed', expect.objectContaining({
+      error_message: expect.stringContaining('Missing images'),
+    }))
+  })
+
+  it('still combines per-scene audio as normal in images-only mode', async () => {
+    setupFromMock({ perSceneAudio: MOCK_PER_SCENE_AUDIO, skipVideoGen: true })
+    const { handleExportJob } = await import('../../../server/worker/handlers/export')
+    await handleExportJob(BASE_JOB as never)
+
+    const concatAudioCall = mockRunFfmpeg.mock.calls.find((args: string[][]) =>
+      args[0]?.includes('-f') && args[0]?.includes('concat') && args[0]?.some(a => a.includes('audio-export')),
+    )
+    expect(concatAudioCall).toBeDefined()
   })
 })
