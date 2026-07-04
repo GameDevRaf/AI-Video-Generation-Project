@@ -74,12 +74,20 @@
             class="w-14 aspect-[9/16] rounded-md overflow-hidden border transition-colors"
             :class="activeSceneId === scene.id ? 'border-white/50' : 'border-white/10'"
           >
+            <img
+              v-if="skipVideoGen && imageStage.getImage(scene)"
+              :src="imageStage.getImage(scene)!"
+              :alt="`Scene ${scene.order_index + 1} timeline image`"
+              class="w-full h-full object-cover"
+              :data-testid="`timeline-image-${scene.id}`"
+            />
             <video
-              v-if="videoStage.getVideo(scene.id)"
+              v-else-if="videoStage.getVideo(scene.id)"
               :src="videoStage.getVideo(scene.id)!"
               class="w-full h-full object-cover"
               muted
               preload="metadata"
+              :data-testid="`timeline-video-${scene.id}`"
             />
             <div v-else class="w-full h-full bg-white/5 flex items-center justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-700" viewBox="0 0 24 24" fill="currentColor">
@@ -106,6 +114,7 @@
         :generation-prompt="videoStage.getGenerationPrompt(scene.id)"
         :data-loaded="dataLoaded"
         :is-active="activeSceneId === scene.id"
+        :dimmed-by-skip-video-gen="skipVideoGen"
         :generating="generatingSceneId === scene.id"
         :generating-prompt="singlePromptRunning && regeneratingPromptSceneId === scene.id"
         :uploading="uploadingSceneId === scene.id"

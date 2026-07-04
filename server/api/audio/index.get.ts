@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
 
   const { data: output } = await supabase
     .from('job_outputs')
-    .select('storage_url, metadata')
+    .select('storage_url, metadata, created_at')
     .eq('project_id', projectId)
     .eq('type', 'audio')
     .eq('label', 'voice_track')
@@ -37,5 +37,5 @@ export default defineEventHandler(async (event) => {
   const sceneSnapshot = (output.metadata as { scene_snapshot?: { id: string; script_text: string }[] } | null)
     ?.scene_snapshot ?? null
 
-  return { url: output.storage_url, sceneSnapshot }
+  return { url: output.storage_url, sceneSnapshot, createdAt: output.created_at }
 })

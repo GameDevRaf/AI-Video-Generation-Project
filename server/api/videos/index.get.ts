@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
 
   const { data } = await supabase
     .from('job_outputs')
-    .select('label, storage_url, metadata')
+    .select('label, storage_url, metadata, created_at')
     .eq('project_id', projectId)
     .eq('type', 'video')
     .like('label', 'scene_video_%')
@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
 
   // Deduplicate: newest video per scene_id
   const seen = new Set<string>()
-  const result: { sceneId: string; url: string; generationPrompt: string }[] = []
+  const result: { sceneId: string; url: string; generationPrompt: string; createdAt: string }[] = []
 
   for (const row of data ?? []) {
     const sceneId = row.label?.replace('scene_video_', '') ?? ''
@@ -41,6 +41,7 @@ export default defineEventHandler(async (event) => {
       sceneId,
       url: row.storage_url,
       generationPrompt: (row.metadata as { prompt?: string } | null)?.prompt ?? '',
+      createdAt: row.created_at,
     })
   }
 

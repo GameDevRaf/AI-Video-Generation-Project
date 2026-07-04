@@ -103,6 +103,24 @@ describe('stage scene cards', () => {
 
     expect(wrapper.emitted('regenerate-prompt')).toEqual([['scene-1']])
   })
+
+  it('dims the whole video scene card when Skip Video Gen is enabled', () => {
+    const wrapper = mount(VideoSceneCard, {
+      props: {
+        scene,
+        prompt: 'slow dolly in',
+        videoUrl: null,
+        imageUrl: 'https://cdn.test/scene.png',
+        isActive: true,
+        dimmedBySkipVideoGen: true,
+        generating: false,
+        generatingPrompt: false,
+      },
+    })
+
+    expect(wrapper.get('[data-testid="video-scene-card"]').text()).toContain('Scene 1')
+    expect(wrapper.get('[data-testid="video-scene-card"]').classes()).toContain('opacity-60')
+  })
 })
 
 // ── SceneCard delete button ─────────────────────────────────────────────────────

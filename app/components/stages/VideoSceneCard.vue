@@ -1,7 +1,11 @@
 <template>
   <div
-    class="flex flex-col gap-3 p-4 rounded-xl border transition-colors"
-    :class="isActive ? 'border-white/30 bg-white/5' : 'border-white/10 bg-white/3'"
+    data-testid="video-scene-card"
+    class="flex flex-col gap-3 p-4 rounded-xl border transition-all"
+    :class="[
+      isActive ? 'border-white/30 bg-white/5' : 'border-white/10 bg-white/3',
+      dimmedBySkipVideoGen ? 'opacity-60' : '',
+    ]"
   >
     <div class="flex items-start justify-between gap-2 min-h-8">
       <span class="text-xs font-medium text-gray-500 line-clamp-2">
@@ -131,6 +135,7 @@ const props = defineProps<{
    */
   dataLoaded?: boolean
   isActive: boolean
+  dimmedBySkipVideoGen?: boolean
   generating: boolean
   generatingPrompt?: boolean
   uploading?: boolean

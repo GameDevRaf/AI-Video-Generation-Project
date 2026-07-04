@@ -56,6 +56,7 @@ test.describe('Happy Path: Auth, Dashboard, Project Creation & Settings', () => 
 
     // 1. Navigate to login
     await page.goto('/auth/login')
+    await page.waitForLoadState('networkidle')
     await page.getByRole('textbox', { name: /email/i }).fill(testUser.email)
     await page.getByRole('textbox', { name: /password/i }).fill(testUser.password)
     await page.getByRole('button', { name: /log in/i }).click()
@@ -70,26 +71,21 @@ test.describe('Happy Path: Auth, Dashboard, Project Creation & Settings', () => 
     // 3. Create a project
     console.log('Creating a project...')
     await page.getByRole('button', { name: /new project/i }).click()
-    await page.locator('input#project-name').fill('E2E Project')
-    await page.locator('textarea#project-desc').fill('Created via happy path E2E test')
+    await expect(page.getByRole('heading', { name: /new project/i })).toBeVisible()
+    await page.getByLabel(/project name/i).fill('E2E Project')
+    await page.getByLabel(/description/i).fill('Created via happy path E2E test')
     await page.getByRole('button', { name: /create project/i }).click()
-
-    // Expecting to close modal and show project (or navigate if there is redirect)
-    // Let's just wait and see if it fails
-    await page.waitForTimeout(2000)
+    await expect(page.getByRole('heading', { name: /new project/i })).toBeHidden({ timeout: 10_000 })
 
     // 4. Navigate to Settings page
     console.log('Navigating to settings...')
     await page.goto('/settings')
-    await page.waitForTimeout(2000)
+    await page.waitForLoadState('networkidle')
 
     // Try to click edit prompt mode
     console.log('Attempting to update settings...')
-    const select = page.locator('select#prompt-mode')
-    if (await select.count() > 0) {
-      await select.selectOption('before_generation')
-    }
-    await page.waitForTimeout(2000)
+    await page.getByRole('button', { name: /edit prompt first/i }).click()
+    await expect(page.getByText('Saved')).toBeVisible({ timeout: 10_000 })
 
     console.log('Test completed. Total browser console errors:', consoleErrors.length)
   })

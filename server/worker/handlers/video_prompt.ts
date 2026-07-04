@@ -20,9 +20,11 @@ Shared visual style: ${anchor || '(none provided)'}`
 }
 
 function buildUserText(description: string, durationSeconds: number | null, hasImage: boolean): string {
+  const targetShotLengthSeconds = Math.max(1, Math.round(durationSeconds ?? 5))
+
   return [
     `Visual description: ${description}`,
-    `Target shot length: ~${durationSeconds ?? 5}s.`,
+    `Target shot length: ~${targetShotLengthSeconds}s.`,
     hasImage ? 'The attached image is this scene\'s first frame - animate from it.' : '',
     'Write the motion prompt.',
   ].filter(Boolean).join('\n')

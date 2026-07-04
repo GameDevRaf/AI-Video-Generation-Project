@@ -22,17 +22,25 @@
     </div>
 
     <div class="flex items-center gap-4 flex-wrap">
-      <button
-        :disabled="isRunning || !scenes.length || mediaReadyCount === 0"
-        class="px-6 py-2.5 bg-white text-gray-950 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors disabled:opacity-40"
-        @click="startExport"
-      >
-        <span v-if="isRunning" class="flex items-center gap-2">
-          <span class="inline-block w-3.5 h-3.5 border-2 border-gray-400 border-t-gray-800 rounded-full animate-spin" />
-          Exporting...
-        </span>
-        <span v-else>{{ latestExport ? 'Re-export MP4' : 'Export MP4' }}</span>
-      </button>
+      <div class="relative">
+        <span
+          v-if="showExportStaleDot"
+          class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-orange-400 z-10 pointer-events-none"
+          data-testid="export-stale-dot"
+          title="Something in the next export changed since the last MP4"
+        />
+        <button
+          :disabled="isRunning || !scenes.length || mediaReadyCount === 0"
+          class="px-6 py-2.5 bg-white text-gray-950 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors disabled:opacity-40"
+          @click="startExport"
+        >
+          <span v-if="isRunning" class="flex items-center gap-2">
+            <span class="inline-block w-3.5 h-3.5 border-2 border-gray-400 border-t-gray-800 rounded-full animate-spin" />
+            Exporting...
+          </span>
+          <span v-else>{{ latestExport ? 'Re-export MP4' : 'Export MP4' }}</span>
+        </button>
+      </div>
 
       <span
         v-if="skipVideoGen"
@@ -125,9 +133,12 @@ const exports = ref<ExportRecord[]>([])
 const latestExport = computed(() => exports.value[0] ?? null)
 const manifest = ref<Record<string, unknown> | null>(null)
 const audioUrl = ref<string | null>(null)
-const sceneVideos = ref<Map<string, string>>(new Map())
-const sceneImages = ref<Map<string, string>>(new Map())
+const audioCreatedAt = ref<string | null>(null)
+const sceneVideos = ref<Map<string, { url: string; createdAt: string }>>(new Map())
+const sceneImages = ref<Map<string, { url: string; createdAt: string }>>(new Map())
 const exportPreviewUrl = ref<string | null>(null)
+const dataLoaded = ref(false)
+const exportMismatchSnapshot = ref(false)
 
 // Skip Video Gen (toggled on the Video tab) makes export build a slideshow from scene
 // images instead of generated video clips, so readiness must track images in that mode.
@@ -136,15 +147,51 @@ const videoCount = computed(() => scenes.value.filter(scene => sceneVideos.value
 const imageCount = computed(() => scenes.value.filter(scene => sceneImages.value.has(scene.id)).length)
 const mediaReadyCount = computed(() => skipVideoGen.value ? imageCount.value : videoCount.value)
 const totalDuration = computed(() => scenes.value.reduce((s, sc) => s + (sc.duration ?? 0), 0))
+const currentExportMode = computed(() => skipVideoGen.value ? 'images_only' : 'video')
+const latestExportManifest = computed(() => {
+  const metadata = latestExport.value?.metadata
+  return metadata
+    ? (metadata.manifest as Record<string, unknown> | undefined) ?? metadata
+    : null
+})
+const exportMismatch = computed(() => {
+  if (!latestExport.value) return false
+
+  const exportCreatedAt = Date.parse(latestExport.value.created_at)
+  if (Number.isNaN(exportCreatedAt)) return false
+
+  const exportedMode = latestExportManifest.value?.mode
+  if (exportedMode && exportedMode !== currentExportMode.value) return true
+
+  if (audioCreatedAt.value) {
+    const audioTs = Date.parse(audioCreatedAt.value)
+    if (!Number.isNaN(audioTs) && audioTs > exportCreatedAt) return true
+  }
+
+  const relevantMedia = skipVideoGen.value ? sceneImages.value : sceneVideos.value
+  for (const scene of scenes.value) {
+    const asset = relevantMedia.get(scene.id)
+    if (!asset) continue
+    const assetTs = Date.parse(asset.createdAt)
+    if (!Number.isNaN(assetTs) && assetTs > exportCreatedAt) return true
+  }
+
+  return false
+})
+const showExportStaleDot = computed(() => !!latestExport.value && dataLoaded.value && exportMismatchSnapshot.value)
 
 onMounted(async () => {
   await fetchScenes()
   await Promise.all([loadExports(), loadCurrentMedia()])
+  dataLoaded.value = true
+  exportMismatchSnapshot.value = exportMismatch.value
 })
 
 watch(isDone, async (done) => {
   if (!done) return
   await Promise.all([loadExports(), loadCurrentMedia()])
+  dataLoaded.value = true
+  exportMismatchSnapshot.value = exportMismatch.value
 })
 
 async function loadExports() {
@@ -159,13 +206,14 @@ async function loadExports() {
 
 async function loadCurrentMedia() {
   const [audio, videos, images] = await Promise.all([
-    $fetch<{ url: string } | null>('/api/audio', { query: { projectId: props.projectId } }),
-    $fetch<{ sceneId: string; url: string }[]>('/api/videos', { query: { projectId: props.projectId } }),
-    $fetch<{ sceneId: string; url: string }[]>('/api/images', { query: { projectId: props.projectId } }),
+    $fetch<{ url: string; createdAt: string } | null>('/api/audio', { query: { projectId: props.projectId } }),
+    $fetch<{ sceneId: string; url: string; createdAt: string }[]>('/api/videos', { query: { projectId: props.projectId } }),
+    $fetch<{ sceneId: string; url: string; createdAt: string }[]>('/api/images', { query: { projectId: props.projectId } }),
   ])
   audioUrl.value = audio?.url ?? null
-  sceneVideos.value = new Map(videos.map(v => [v.sceneId, v.url]))
-  sceneImages.value = new Map(images.map(i => [i.sceneId, i.url]))
+  audioCreatedAt.value = audio?.createdAt ?? null
+  sceneVideos.value = new Map(videos.map(v => [v.sceneId, { url: v.url, createdAt: v.createdAt }]))
+  sceneImages.value = new Map(images.map(i => [i.sceneId, { url: i.url, createdAt: i.createdAt }]))
 }
 
 async function startExport() {

@@ -6,7 +6,7 @@
         <p class="text-sm text-gray-400">Start making videos with AI</p>
       </div>
 
-      <form class="flex flex-col gap-4" @submit.prevent="signup">
+      <form class="flex flex-col gap-4" onsubmit="return false;" @submit.prevent="signup">
         <div class="flex flex-col gap-1.5">
           <label class="text-sm text-gray-300" for="email">Email</label>
           <input

@@ -26,7 +26,7 @@ vi.mock('../../../server/worker/lib/visualDescriptions', () => ({
 
 const allScenes = [
   { id: 'scene-1', title: 'One', script_text: 'First scene', duration: 4 },
-  { id: 'scene-2', title: 'Two', script_text: 'Second scene', duration: 5 },
+  { id: 'scene-2', title: 'Two', script_text: 'Second scene', duration: 5.6 },
 ]
 
 const sceneQuery = {
@@ -120,6 +120,20 @@ describe('video prompt handler', () => {
     expect(mockRegistryScript).toHaveBeenCalledWith('gemini')
     expect(mockGetProviderKey).toHaveBeenCalledWith('gemini', 'user-1')
     expect(mockScriptGenerate.mock.calls[0][0].model).toBe('gemini-3-flash')
+  })
+
+  it('includes the rounded target shot length in the motion-prompt input', async () => {
+    mockScriptGenerate.mockResolvedValueOnce({ text: 'motion' })
+
+    const { handleVideoPromptJob } = await import('../../../server/worker/handlers/video_prompt')
+    await handleVideoPromptJob({
+      ...BASE_JOB,
+      input: { scene_id: 'scene-2' },
+    } as never)
+
+    const userPrompt = mockScriptGenerate.mock.calls[0][0].messages[0].content
+    expect(userPrompt).toContain('Target shot length: ~6s.')
+    expect(userPrompt).not.toContain('5.6s')
   })
 
   it('stores prompts for all scenes when no scene id is provided', async () => {
