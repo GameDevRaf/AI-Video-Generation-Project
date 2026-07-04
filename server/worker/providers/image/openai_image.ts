@@ -14,12 +14,13 @@ export class OpenAIImageProvider implements ImageProvider {
       // OpenAI only accepts a fixed size enum — '1024x1536' is its closest portrait
       // preset to VIDEO_FORMAT's hardcoded 9:16.
       size: '1024x1536',
-      response_format: 'url',
+      // GPT image models (gpt-image-1/1.5/2) always return base64 data — `response_format`
+      // is not a supported param for them (unlike dall-e-2/3), so it must not be sent.
     })
 
-    const imageUrl = res.data?.[0]?.url
-    if (!imageUrl) throw new Error('OpenAI Images returned no URL')
+    const b64 = res.data?.[0]?.b64_json
+    if (!b64) throw new Error('OpenAI Images returned no image data')
 
-    return { imageUrl }
+    return { rawBuffer: Buffer.from(b64, 'base64'), mimeType: 'image/png' }
   }
 }

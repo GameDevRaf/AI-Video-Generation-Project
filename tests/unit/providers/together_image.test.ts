@@ -21,6 +21,22 @@ describe('TogetherImageProvider', () => {
     }))
   })
 
+  it('forwards negativePrompt as negative_prompt when provided', async () => {
+    mockGenerate.mockResolvedValueOnce({ data: [{ url: 'https://together.ai/img.png' }] })
+    const { TogetherImageProvider } = await import('../../../server/worker/providers/image/together_image')
+    await new TogetherImageProvider().generate({
+      job: {} as never, apiKey: 'k', model: 'm', prompt: 'p', negativePrompt: 'blurry, low quality',
+    })
+    expect(mockGenerate).toHaveBeenCalledWith(expect.objectContaining({ negative_prompt: 'blurry, low quality' }))
+  })
+
+  it('omits negative_prompt when not provided', async () => {
+    mockGenerate.mockResolvedValueOnce({ data: [{ url: 'https://together.ai/img.png' }] })
+    const { TogetherImageProvider } = await import('../../../server/worker/providers/image/together_image')
+    await new TogetherImageProvider().generate({ job: {} as never, apiKey: 'k', model: 'm', prompt: 'p' })
+    expect(mockGenerate.mock.calls[0][0]).not.toHaveProperty('negative_prompt')
+  })
+
   it('returns imageUrl from data[0].url', async () => {
     mockGenerate.mockResolvedValueOnce({ data: [{ url: 'https://together.ai/out.png' }] })
     const { TogetherImageProvider } = await import('../../../server/worker/providers/image/together_image')

@@ -125,9 +125,11 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
   {
     id: 'ideogram', displayName: 'Ideogram v3', category: 'image',
     defaultModel: 'V_3', asyncPattern: 'sync',
+    // V2 is served by a separate legacy endpoint (api.ideogram.ai/generate, JSON body,
+    // ASPECT_10_16-style ratio enum) with no model field on the v3 endpoint the adapter
+    // calls — not selectable here until a second adapter path is built for it.
     models: [
       { id: 'V_3', label: 'Ideogram v3' },
-      { id: 'V_2', label: 'Ideogram v2' },
     ],
   },
   {
@@ -218,13 +220,13 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
   },
   {
     id: 'gemini_tts', displayName: 'Gemini TTS (Google)', category: 'audio',
-    defaultModel: 'gemini-2.5-flash-tts', asyncPattern: 'sync',
+    defaultModel: 'gemini-2.5-flash-preview-tts', asyncPattern: 'sync',
     keyProviderId: 'gemini',
     keyDisplayName: 'Google AI Studio / Gemini',
     models: [
-      { id: 'gemini-2.5-flash-tts', label: 'Gemini 2.5 Flash TTS' },
-      { id: 'gemini-2.5-flash-lite-tts', label: 'Gemini 2.5 Flash Lite TTS' },
-      { id: 'gemini-3.1-flash-tts', label: 'Gemini 3.1 Flash TTS' },
+      { id: 'gemini-2.5-flash-preview-tts', label: 'Gemini 2.5 Flash TTS' },
+      { id: 'gemini-2.5-pro-preview-tts', label: 'Gemini 2.5 Pro TTS' },
+      { id: 'gemini-3.1-flash-tts-preview', label: 'Gemini 3.1 Flash TTS' },
     ],
   },
   {
@@ -253,10 +255,12 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
     defaultModel: 'kling-v2-master', asyncPattern: 'polling',
     dualCredentials: true,
     dualCredentialFields: ['Access Key (AK)', 'Secret Key (SK)'],
+    // "pro" is a separate `mode` request param, not part of model_name — kling-v1-pro/
+    // kling-v1-5-pro are not valid model_name values.
     models: [
       { id: 'kling-v2-master', label: 'Kling v2 Master' },
-      { id: 'kling-v1-pro', label: 'Kling v1 Pro' },
-      { id: 'kling-v1-5-pro', label: 'Kling v1.5 Pro' },
+      { id: 'kling-v2-6', label: 'Kling v2.6' },
+      { id: 'kling-v1-6', label: 'Kling v1.6' },
     ],
   },
   {
@@ -277,9 +281,11 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
   },
   {
     id: 'fal_video', displayName: 'Pika (via fal.ai)', category: 'video',
-    defaultModel: 'fal-ai/pika-ai/pikav2.2', asyncPattern: 'queue',
+    // Base ids only — the adapter maps each to its real text-to-video/image-to-video
+    // endpoint slug pair (fal has no single uniform suffix convention across models).
+    defaultModel: 'fal-ai/pika/v2.2', asyncPattern: 'queue',
     models: [
-      { id: 'fal-ai/pika-ai/pikav2.2', label: 'Pika v2.2' },
+      { id: 'fal-ai/pika/v2.2', label: 'Pika v2.2' },
       { id: 'fal-ai/minimax/video-01', label: 'MiniMax Video 01' },
     ],
   },
@@ -299,8 +305,8 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
     keyProviderId: 'replicate',
     models: [
       { id: 'minimax/video-01-live', label: 'MiniMax Video 01 Live' },
-      { id: 'wan-ai/wan2.1-i2v-480p', label: 'Wan 2.1 (480p)' },
-      { id: 'luma/ray2-flash', label: 'Luma Ray 2 Flash' },
+      { id: 'wavespeedai/wan-2.1-i2v-480p', label: 'Wan 2.1 (480p)' },
+      { id: 'luma/ray-flash-2-540p', label: 'Luma Ray Flash 2 (540p)' },
     ],
   },
   {
@@ -308,9 +314,10 @@ export const PROVIDER_CATALOG: ProviderMeta[] = [
     defaultModel: 'Wan-AI/Wan2.1-T2V-14B', asyncPattern: 'sync',
     keyProviderId: 'huggingface',
     keyDisplayName: 'Hugging Face Token',
+    // ali-vilab/i2vgen-xl removed: a 2023-era research model with no confirmed current
+    // Inference Providers coverage (see /backend/provider-api-audit).
     models: [
       { id: 'Wan-AI/Wan2.1-T2V-14B', label: 'Wan 2.1 T2V 14B' },
-      { id: 'ali-vilab/i2vgen-xl', label: 'I2VGen-XL' },
     ],
   },
 ]

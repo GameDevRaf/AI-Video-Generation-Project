@@ -17,6 +17,20 @@ describe('IdeogramImageProvider', () => {
     vi.unstubAllGlobals()
   })
 
+  it('sends lowercase-x aspect_ratio format', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: [{ url: 'https://ideogram.ai/img.png' }] }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+    const { IdeogramImageProvider } = await import('../../../server/worker/providers/image/ideogram')
+    await new IdeogramImageProvider().generate({ job: {} as never, apiKey: 'k', model: 'V_3', prompt: 'p' })
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+    const form = init.body as FormData
+    expect(form.get('aspect_ratio')).toBe('9x16')
+    vi.unstubAllGlobals()
+  })
+
   it('returns imageUrl from data[0].url', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,

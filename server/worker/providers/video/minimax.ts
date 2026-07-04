@@ -1,5 +1,4 @@
 import type { VideoProvider, VideoParams, VideoResult } from '../types'
-import { VIDEO_FORMAT } from '../../../../shared/config/videoFormat'
 
 const BASE = 'https://api.minimax.io/v1'
 const POLL_INTERVAL_MS = 10_000
@@ -14,15 +13,20 @@ export class MiniMaxVideoProvider implements VideoProvider {
       'Content-Type': 'application/json',
     }
 
+    // MiniMax only accepts duration 6 or 10 (seconds); there is no 5s option and no
+    // aspect_ratio field in this API at all. 768P is a valid resolution for both
+    // catalog models (MiniMax-Hailuo-02 and -2.3) at either duration.
+    const requestedDuration = Math.round(params.duration ?? 5)
+    const duration = requestedDuration >= 8 ? 10 : 6
+
     const createRes = await fetch(`${BASE}/video_generation`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         model: params.model,
         prompt: params.prompt,
-        duration: 6,
-        resolution: '720P',
-        aspect_ratio: VIDEO_FORMAT.aspectRatio,
+        duration,
+        resolution: '768P',
         prompt_optimizer: true,
         ...(params.imageUrl ? { first_frame_image: params.imageUrl } : {}),
       }),

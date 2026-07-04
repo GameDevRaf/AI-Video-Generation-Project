@@ -15,6 +15,7 @@ export class TogetherImageProvider implements ImageProvider {
       steps: 28,
       width: VIDEO_FORMAT.width,
       height: VIDEO_FORMAT.height,
+      ...(params.negativePrompt ? { negative_prompt: params.negativePrompt } : {}),
     })
 
     const imageUrl = (res.data as Array<{ url?: string }>)[0]?.url

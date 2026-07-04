@@ -12,7 +12,8 @@ async function makeKlingJWT(ak: string, sk: string): Promise<string> {
     .sign(new TextEncoder().encode(sk))
 }
 
-const KLING_BASE = 'https://api.klingai.com'
+// Global (non-China) traffic endpoint — api.klingai.com is the legacy/China host.
+const KLING_BASE = 'https://api-singapore.klingai.com'
 const POLL_INTERVAL_MS = 10_000
 const MAX_ATTEMPTS = 60  // 10 min max
 

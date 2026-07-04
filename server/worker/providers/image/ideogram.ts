@@ -7,9 +7,9 @@ export class IdeogramImageProvider implements ImageProvider {
     const formData = new FormData()
     formData.append('prompt', params.prompt)
     formData.append('rendering_speed', 'DEFAULT')
-    // Ideogram's aspect_ratio uses an uppercase "X" separator — '9X16' is VIDEO_FORMAT's
+    // Ideogram v3's aspect_ratio uses a lowercase "x" separator — '9x16' is VIDEO_FORMAT's
     // hardcoded 9:16 in that format.
-    formData.append('aspect_ratio', '9X16')
+    formData.append('aspect_ratio', '9x16')
     if (params.negativePrompt) formData.append('negative_prompt', params.negativePrompt)
 
     const res = await fetch('https://api.ideogram.ai/v1/ideogram-v3/generate', {

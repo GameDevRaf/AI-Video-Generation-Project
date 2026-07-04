@@ -27,6 +27,21 @@ describe('ReplicateVideoProvider', () => {
     expect(result.videoUrl).toBe('https://delivery.replicate.com/vid.mp4')
   })
 
+  it('builds the correct endpoint for the corrected wavespeedai wan model slug', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'v-5', status: 'succeeded', output: ['https://delivery.replicate.com/wan.mp4'] }),
+    })
+    const { ReplicateVideoProvider } = await import('../../../server/worker/providers/video/replicate_video')
+    await new ReplicateVideoProvider().generate({
+      job: {} as never, apiKey: 'k', model: 'wavespeedai/wan-2.1-i2v-480p', prompt: 'p', duration: 5,
+    })
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.replicate.com/v1/models/wavespeedai/wan-2.1-i2v-480p/predictions',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
   it('polls until succeeded and returns videoUrl (fake timers)', async () => {
     mockFetch
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'v-2', status: 'starting' }) })

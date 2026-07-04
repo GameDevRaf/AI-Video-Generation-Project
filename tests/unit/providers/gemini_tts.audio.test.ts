@@ -27,10 +27,10 @@ describe('GeminiTTSProvider', () => {
     mockFetch.mockResolvedValueOnce(makeGeminiTTSResponse())
     const { GeminiTTSProvider } = await import('../../../server/worker/providers/audio/gemini_tts')
     await new GeminiTTSProvider().generate({
-      job: {} as never, apiKey: 'goog-key', model: 'gemini-2.5-flash-tts', text: 'Hello', voiceId: 'Kore',
+      job: {} as never, apiKey: 'goog-key', model: 'gemini-2.5-flash-preview-tts', text: 'Hello', voiceId: 'Kore',
     })
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('gemini-2.5-flash-tts:generateContent'),
+      expect.stringContaining('gemini-2.5-flash-preview-tts:generateContent'),
       expect.objectContaining({
         headers: expect.objectContaining({ 'x-goog-api-key': 'goog-key' }),
       }),
@@ -41,7 +41,7 @@ describe('GeminiTTSProvider', () => {
     mockFetch.mockResolvedValueOnce(makeGeminiTTSResponse())
     const { GeminiTTSProvider } = await import('../../../server/worker/providers/audio/gemini_tts')
     await new GeminiTTSProvider().generate({
-      job: {} as never, apiKey: 'k', model: 'gemini-2.5-flash-tts', text: 'Hi', voiceId: 'Charon',
+      job: {} as never, apiKey: 'k', model: 'gemini-2.5-flash-preview-tts', text: 'Hi', voiceId: 'Charon',
     })
     const body = JSON.parse(mockFetch.mock.calls[0][1].body)
     expect(body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe('Charon')

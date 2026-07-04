@@ -15,6 +15,10 @@ export class StabilityImageProvider implements ImageProvider {
     formData.append('prompt', params.prompt)
     formData.append('output_format', 'png')
     formData.append('aspect_ratio', VIDEO_FORMAT.aspectRatio)
+    // The /sd3 endpoint serves multiple model variants and needs an explicit `model`
+    // field — without it the endpoint falls back to its own default, so selecting
+    // "SD 3.5 Large" would otherwise have no effect.
+    if (params.model === 'stable-diffusion-3-5-large') formData.append('model', 'sd3.5-large')
     if (params.negativePrompt) formData.append('negative_prompt', params.negativePrompt)
 
     const res = await fetch(endpoint, {

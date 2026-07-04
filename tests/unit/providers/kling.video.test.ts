@@ -50,7 +50,8 @@ describe('KlingVideoProvider', () => {
     await vi.advanceTimersByTimeAsync(11_000)
     const result = await promise
 
-    const [, createInit] = calls[0]
+    const [createUrl, createInit] = calls[0]
+    expect(createUrl).toBe('https://api-singapore.klingai.com/v1/videos/image2video')
     expect((createInit.headers as Record<string, string>)['Authorization']).toBe('Bearer mock.kling.jwt')
     expect(result.videoUrl).toBe('https://klingai.com/v.mp4')
   })
