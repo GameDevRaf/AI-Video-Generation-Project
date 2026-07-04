@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,6 +9,13 @@ import { downloadToFile, extensionFromUrl, runFfmpeg } from '../../utils/ffmpeg'
 interface AudioOutputRow {
   label: string | null
   storage_url: string | null
+}
+
+function getSceneOrderSignature(scenes: { id: string; script_text: string }[]) {
+  return createHash('sha1')
+    .update(scenes.map(scene => `${scene.id}:${scene.script_text}`).join('|'))
+    .digest('hex')
+    .slice(0, 12)
 }
 
 // Concatenates all per-scene audio files (scene_audio_*) for a project into a
@@ -41,6 +49,7 @@ export default defineEventHandler(async (event) => {
   if (!scenes?.length) throw createError({ statusCode: 404, message: 'No scenes found' })
 
   const sceneIds = scenes.map(s => s.id)
+  const sceneOrderSignature = getSceneOrderSignature(scenes)
 
   // Fetch latest per-scene audio outputs
   const { data: outputs } = await adminSupabase
@@ -98,7 +107,7 @@ export default defineEventHandler(async (event) => {
     ])
 
     const audioBuffer = await readFile(combinedPath)
-    const storageKey = `${projectId}/audio/combined_${Date.now()}.mp3`
+    const storageKey = `${projectId}/audio/combined_${sceneOrderSignature}_${Date.now()}.mp3`
 
     const { error: uploadErr } = await supabase.storage
       .from('assets')
@@ -119,8 +128,8 @@ export default defineEventHandler(async (event) => {
         status: 'completed',
         provider: 'internal',
         model: 'concat',
-        input: { combine: true, scene_count: scenes.length },
-        output_summary: { combined: true },
+        input: { combine: true, scene_count: scenes.length, scene_order_signature: sceneOrderSignature },
+        output_summary: { combined: true, scene_order_signature: sceneOrderSignature },
         completed_at: new Date().toISOString(),
       })
       .select()
@@ -139,6 +148,7 @@ export default defineEventHandler(async (event) => {
       metadata: {
         combined: true,
         scene_count: scenes.length,
+        scene_order_signature: sceneOrderSignature,
         scene_snapshot: scenes.map(s => ({ id: s.id, script_text: s.script_text })),
       },
     })

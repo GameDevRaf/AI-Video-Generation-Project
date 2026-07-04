@@ -38,45 +38,54 @@
     </div>
 
     <!-- Tab content with directional slide transition -->
-    <div v-else class="h-full relative overflow-hidden">
-      <Transition :name="transitionName">
-        <div :key="activeTab" class="tab-panel">
+    <div v-else class="flex h-full flex-col gap-4">
+      <div
+        v-if="sceneOrderError"
+        class="mx-8 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200"
+      >
+        {{ sceneOrderError }}
+      </div>
+
+      <div class="relative min-h-0 flex-1 overflow-hidden">
+        <Transition :name="transitionName">
+          <div :key="activeTab" class="tab-panel">
           <!-- Script tab: script generation + scene splitting -->
-          <template v-if="activeTab === 'script'">
-            <StagesScriptStage :project-id="projectId" @done="onScriptDone" />
-            <div v-if="showSceneSplit" class="border-t border-white/5">
-              <StagesSceneSplitStage
-                :project-id="projectId"
-                :script-text="workspace.activeScriptText ?? ''"
-                @done="onSceneDone"
-              />
-            </div>
-          </template>
+            <template v-if="activeTab === 'script'">
+              <StagesScriptStage :project-id="projectId" @done="onScriptDone" />
+              <div v-if="showSceneSplit" class="border-t border-white/5">
+                <StagesSceneSplitStage
+                  :project-id="projectId"
+                  :script-text="workspace.activeScriptText ?? ''"
+                  @done="onSceneDone"
+                />
+              </div>
+            </template>
 
-          <!-- Image tab -->
-          <StagesImageStage
-            v-else-if="activeTab === 'image'"
-            :project-id="projectId"
-            :prompt-edit-mode="projectSettings?.prompt_edit_mode"
-            @done="onImageDone"
-          />
+            <!-- Image tab -->
+            <StagesImageStage
+              v-else-if="activeTab === 'image'"
+              :project-id="projectId"
+              :prompt-edit-mode="projectSettings?.prompt_edit_mode"
+              @done="onImageDone"
+            />
 
-          <!-- Audio tab -->
-          <StagesAudioStage
-            v-else-if="activeTab === 'audio'"
-            :project-id="projectId"
-            @done="onAudioDone"
-          />
+            <!-- Audio tab -->
+            <StagesAudioStage
+              v-else-if="activeTab === 'audio'"
+              :project-id="projectId"
+              @done="onAudioDone"
+            />
 
-          <!-- Video tab: video generation + export when reached -->
-          <template v-else-if="activeTab === 'video'">
-            <StagesVideoStage :project-id="projectId" @done="onVideoDone" />
-            <div v-if="showExport" ref="exportSection" class="border-t border-white/5">
-              <StagesExportStage :project-id="projectId" />
-            </div>
-          </template>
-        </div>
-      </Transition>
+            <!-- Video tab: video generation + export when reached -->
+            <template v-else-if="activeTab === 'video'">
+              <StagesVideoStage :project-id="projectId" @done="onVideoDone" />
+              <div v-if="showExport" ref="exportSection" class="border-t border-white/5">
+                <StagesExportStage :project-id="projectId" />
+              </div>
+            </template>
+          </div>
+        </Transition>
+      </div>
     </div>
 
     <!-- Provider panel (teleports to body internally) -->
@@ -111,12 +120,14 @@ const projectId = computed(() => route.params.projectId as string)
 const workspace = useWorkspaceStore()
 const projectStore = useProjectStore()
 const jobsStore = useJobsStore()
+const sceneOrderSync = useSceneOrderSync(projectId)
 
 const providerPanelOpen = ref(false)
 const restoring = ref(true)
 const activeTab = ref<TabId>('script')
 const slideDirection = ref<'left' | 'right'>('left')
 const exportSection = ref<HTMLElement | null>(null)
+const sceneOrderError = ref<string | null>(null)
 
 const project = computed(() => projectStore.currentProject)
 const projectSettings = computed(() => projectStore.settings)
@@ -140,11 +151,26 @@ function stageToTab(stage: string): TabId {
   return 'script'
 }
 
-function setTab(tab: TabId) {
+async function setTab(tab: TabId) {
+  if (tab === activeTab.value) return true
+
+  sceneOrderError.value = null
+  if (activeTab.value === 'script' && tab !== 'script') {
+    try {
+      await sceneOrderSync.flushPendingReorder()
+    } catch (error) {
+      sceneOrderError.value = error instanceof Error
+        ? error.message
+        : 'Failed to apply the new scene order before switching tabs.'
+      return false
+    }
+  }
+
   const currentIdx = TABS.indexOf(activeTab.value)
   const nextIdx = TABS.indexOf(tab)
   slideDirection.value = nextIdx >= currentIdx ? 'left' : 'right'
   activeTab.value = tab
+  return true
 }
 
 // Provider selector — follows the active tab, not the DB project stage
@@ -206,6 +232,18 @@ onMounted(async () => {
   restoring.value = false
 })
 
+onBeforeRouteLeave(async () => {
+  sceneOrderError.value = null
+  try {
+    await sceneOrderSync.flushPendingReorder()
+  } catch (error) {
+    sceneOrderError.value = error instanceof Error
+      ? error.message
+      : 'Failed to apply the new scene order before leaving the project.'
+    return false
+  }
+})
+
 onUnmounted(() => {
   jobsStore.cancelAll()
   projectStore.reset()
@@ -218,19 +256,20 @@ function onScriptDone() {
   projectStore.setStage('scene_split')
 }
 
-function onSceneDone() {
-  projectStore.setStage('image')
-  setTab('image')
+async function onSceneDone() {
+  const switched = await setTab('image')
+  if (!switched) return
+  await projectStore.setStage('image')
 }
 
-function onImageDone() {
-  projectStore.setStage('audio')
-  setTab('audio')
+async function onImageDone() {
+  await projectStore.setStage('audio')
+  await setTab('audio')
 }
 
-function onAudioDone() {
-  projectStore.setStage('video')
-  setTab('video')
+async function onAudioDone() {
+  await projectStore.setStage('video')
+  await setTab('video')
 }
 
 function onVideoDone() {

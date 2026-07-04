@@ -4,6 +4,7 @@ export function useScenes(projectId: MaybeRef<string>) {
   const scenes = ref<DbScene[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const sceneOrderSync = useSceneOrderSync(projectId)
 
   async function fetchScenes() {
     loading.value = true
@@ -12,6 +13,7 @@ export function useScenes(projectId: MaybeRef<string>) {
       scenes.value = await $fetch<DbScene[]>('/api/scenes', {
         query: { projectId: toValue(projectId) },
       })
+      sceneOrderSync.registerFetchedScenes(scenes.value)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load scenes'
     } finally {
@@ -41,6 +43,11 @@ export function useScenes(projectId: MaybeRef<string>) {
     if ('duration' in patch) {
       const recalced = recalcTimestamps([...scenes.value])
       scenes.value = recalced
+      if (sceneOrderSync.hasPendingReorder.value) {
+        sceneOrderSync.stagePendingReorder(recalced)
+        await sceneOrderSync.flushPendingReorder()
+        return
+      }
       await persistTimestamps(recalced)
       return
     }
@@ -59,7 +66,7 @@ export function useScenes(projectId: MaybeRef<string>) {
 
     const recalced = recalcTimestamps(list)
     scenes.value = recalced
-    await persistTimestamps(recalced)
+    sceneOrderSync.stagePendingReorder(recalced)
   }
 
   async function deleteScene(id: string) {
@@ -71,7 +78,16 @@ export function useScenes(projectId: MaybeRef<string>) {
     const remaining = scenes.value.filter(s => s.id !== id)
     const recalced = recalcTimestamps(remaining)
     scenes.value = recalced
-    if (recalced.length) await persistTimestamps(recalced)
+    if (!recalced.length) {
+      sceneOrderSync.markPersistedScenes([])
+      return
+    }
+    if (sceneOrderSync.hasPendingReorder.value) {
+      sceneOrderSync.stagePendingReorder(recalced)
+      await sceneOrderSync.flushPendingReorder()
+      return
+    }
+    await persistTimestamps(recalced)
   }
 
   async function createScene() {
@@ -83,6 +99,11 @@ export function useScenes(projectId: MaybeRef<string>) {
     const appended = [...scenes.value, created]
     const recalced = recalcTimestamps(appended)
     scenes.value = recalced
+    if (sceneOrderSync.hasPendingReorder.value) {
+      sceneOrderSync.stagePendingReorder(recalced)
+      await sceneOrderSync.flushPendingReorder()
+      return created
+    }
     await persistTimestamps(recalced)
     return created
   }
@@ -101,6 +122,7 @@ export function useScenes(projectId: MaybeRef<string>) {
         })),
       },
     })
+    sceneOrderSync.markPersistedScenes(list)
   }
 
   const totalDuration = computed(() =>
