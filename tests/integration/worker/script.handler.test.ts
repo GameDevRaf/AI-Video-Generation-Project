@@ -136,7 +136,7 @@ describe('script handler', () => {
     expect(callArg.systemPrompt).not.toContain('~600s')
   })
 
-  it('propagates error from provider (worker retry loop handles it)', async () => {
+  it('propagates error from provider (loop.ts fails the job — no automatic retry)', async () => {
     mockScriptGenerate.mockRejectedValueOnce(new Error('API rate limit'))
     const { handleScriptJob } = await import('../../../server/worker/handlers/script')
     await expect(

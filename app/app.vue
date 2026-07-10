@@ -4,5 +4,6 @@
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>
+    <NotificationHost />
   </div>
 </template>

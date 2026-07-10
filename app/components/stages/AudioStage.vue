@@ -110,9 +110,6 @@
         <span v-else>{{ audioUrl ? 'Replace with upload' : 'Upload audio' }}</span>
       </button>
 
-      <p v-if="generationError || uploadError" class="text-sm text-amber-400/80">
-        {{ generationError ?? uploadError }}
-      </p>
     </div>
 
     <!-- Audio player (shown when audio is available) -->
@@ -146,6 +143,7 @@ const providers = [
 ]
 
 const projectStore = useProjectStore()
+const notifications = useNotificationsStore()
 const audioStage = useAudioStage(toRef(props, 'projectId'))
 const { settings, audioUrl, currentVoices } = audioStage
 
@@ -164,12 +162,17 @@ const audioMismatch = computed(() => {
 
 const audioInput = ref<HTMLInputElement | null>(null)
 const uploadingAudio = ref(false)
-const uploadError = ref<string | null>(null)
-const generationError = ref<string | null>(null)
 
 // Per-scene audio job tracking
 const jobState = ref({ total: 0, completed: 0, failed: 0, pendingIds: [] as string[] })
 const isGenerating = computed(() => jobState.value.pendingIds.length > 0 || jobState.value.total > 0 && jobState.value.completed + jobState.value.failed < jobState.value.total)
+
+// jobId → sceneId, so a failure can be attributed back to a specific scene for retry.
+// Not reactive (only read during polling/retry bookkeeping, never rendered directly).
+let pendingJobScenes = new Map<string, string>()
+// Survives jobState's reset once all jobs settle, so the Retry button stays available
+// until the next generate()/retry call.
+const failedSceneJobs = ref<{ sceneId: string; jobId: string }[]>([])
 
 const sceneImagesMap = computed(() => new Map<string, string>())
 
@@ -202,6 +205,8 @@ async function pollAudioJobs() {
           newCompleted++
         } else if (j.status === 'failed') {
           newFailed++
+          const sceneId = pendingJobScenes.get(jobId)
+          if (sceneId) failedSceneJobs.value = [...failedSceneJobs.value, { sceneId, jobId }]
         } else {
           stillPending.push(jobId)
         }
@@ -227,7 +232,13 @@ async function pollAudioJobs() {
 
 async function onAllAudioJobsComplete() {
   if (jobState.value.failed > 0) {
-    generationError.value = `Audio generation failed for ${jobState.value.failed} scene(s).`
+    notifications.notifySummary({
+      key: 'audio-bulk',
+      message: `Audio generation failed for ${jobState.value.failed} scene(s).`,
+      onRetry: retryFailedAudio,
+    })
+  } else {
+    notifications.dismiss('audio-bulk')
   }
 
   if (jobState.value.failed < jobState.value.total) {
@@ -257,7 +268,9 @@ async function onAllAudioJobsComplete() {
 async function generate() {
   if (isGenerating.value || !scenes.value.length) return
 
-  generationError.value = null
+  notifications.dismiss('audio-bulk')
+  failedSceneJobs.value = []
+  pendingJobScenes = new Map()
   const provider = projectStore.settings?.default_audio_provider ?? settings.value.provider
 
   const commonInput = {
@@ -268,32 +281,36 @@ async function generate() {
     similarity_boost: settings.value.similarityBoost,
   }
 
+  const sortedScenes = [...scenes.value].sort((a, b) => a.order_index - b.order_index)
+
   // Fire one audio job per scene in parallel
   const results = await Promise.allSettled(
-    [...scenes.value]
-      .sort((a, b) => a.order_index - b.order_index)
-      .map(scene =>
-        $fetch<{ id: string }>('/api/jobs', {
-          method: 'POST',
-          body: {
-            projectId: props.projectId,
-            type: 'audio',
-            input: {
-              scene_id: scene.id,
-              script_text: scene.script_text,
-              ...commonInput,
-            },
+    sortedScenes.map(scene =>
+      $fetch<{ id: string }>('/api/jobs', {
+        method: 'POST',
+        body: {
+          projectId: props.projectId,
+          type: 'audio',
+          input: {
+            scene_id: scene.id,
+            script_text: scene.script_text,
+            ...commonInput,
           },
-        }),
-      ),
+        },
+      }),
+    ),
   )
 
-  const successIds = results
-    .filter((r): r is PromiseFulfilledResult<{ id: string }> => r.status === 'fulfilled')
-    .map(r => r.value.id)
+  const successIds: string[] = []
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      successIds.push(r.value.id)
+      pendingJobScenes.set(r.value.id, sortedScenes[i]!.id)
+    }
+  })
 
   if (!successIds.length) {
-    generationError.value = 'Failed to start audio generation.'
+    notifications.notifySummary({ key: 'audio-bulk', message: 'Failed to start audio generation.' })
     return
   }
 
@@ -308,6 +325,36 @@ async function generate() {
   pollTimer = setTimeout(pollAudioJobs, 2000)
 }
 
+async function retryFailedAudio() {
+  if (isGenerating.value || !failedSceneJobs.value.length) return
+
+  const toRetry = failedSceneJobs.value
+  failedSceneJobs.value = []
+  notifications.dismiss('audio-bulk')
+
+  const results = await Promise.allSettled(
+    toRetry.map(({ jobId }) => $fetch<{ id: string }>(`/api/jobs/${jobId}/retry`, { method: 'POST', body: {} })),
+  )
+
+  const successIds: string[] = []
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      successIds.push(r.value.id)
+      pendingJobScenes.set(r.value.id, toRetry[i]!.sceneId)
+    } else {
+      failedSceneJobs.value = [...failedSceneJobs.value, toRetry[i]!]
+    }
+  })
+
+  if (!successIds.length) {
+    notifications.notifySummary({ key: 'audio-bulk', message: 'Failed to retry audio generation.' })
+    return
+  }
+
+  jobState.value = { total: successIds.length, completed: 0, failed: 0, pendingIds: successIds }
+  pollTimer = setTimeout(pollAudioJobs, 2000)
+}
+
 async function onAudioFileChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -315,7 +362,7 @@ async function onAudioFileChange(event: Event) {
   if (!file) return
 
   uploadingAudio.value = true
-  uploadError.value = null
+  notifications.dismiss('audio-upload')
   try {
     const formData = new FormData()
     formData.append('projectId', props.projectId)
@@ -332,7 +379,10 @@ async function onAudioFileChange(event: Event) {
     // Detect total audio duration, then redistribute scene durations proportionally
     await redistributeSceneDurations(result.url)
   } catch (error) {
-    uploadError.value = error instanceof Error ? error.message : 'Audio upload failed.'
+    notifications.notifyJobError({
+      key: 'audio-upload',
+      errorMessage: error instanceof Error ? error.message : 'Audio upload failed.',
+    })
   } finally {
     uploadingAudio.value = false
   }

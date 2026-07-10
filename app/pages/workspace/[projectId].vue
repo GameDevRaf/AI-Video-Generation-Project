@@ -120,6 +120,7 @@ const projectId = computed(() => route.params.projectId as string)
 const workspace = useWorkspaceStore()
 const projectStore = useProjectStore()
 const jobsStore = useJobsStore()
+const notifications = useNotificationsStore()
 const sceneOrderSync = useSceneOrderSync(projectId)
 
 const providerPanelOpen = ref(false)
@@ -165,6 +166,9 @@ async function setTab(tab: TabId) {
       return false
     }
   }
+
+  // Switching tabs unmounts the current stage; drop any of its failure toasts.
+  notifications.clear()
 
   const currentIdx = TABS.indexOf(activeTab.value)
   const nextIdx = TABS.indexOf(tab)
@@ -247,6 +251,7 @@ onBeforeRouteLeave(async () => {
 onUnmounted(() => {
   jobsStore.cancelAll()
   projectStore.reset()
+  notifications.clear()
 })
 
 // Stage progression handlers — advance DB stage and switch to the next tab

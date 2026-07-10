@@ -98,6 +98,17 @@ describe('useJobsStore', () => {
     expect(store.getJob('new-job')).toBeDefined()
   })
 
+  it('retryJob calls POST /api/jobs/:id/retry and tracks the new job', async () => {
+    const retried = makeJob({ id: 'new-job', status: 'queued' })
+    const fetchMock = vi.fn().mockResolvedValue(retried)
+    vi.stubGlobal('$fetch', fetchMock)
+    const store = useJobsStore()
+    const job = await store.retryJob('failed-job-1')
+    expect(fetchMock).toHaveBeenCalledWith('/api/jobs/failed-job-1/retry', expect.objectContaining({ method: 'POST' }))
+    expect(job.id).toBe('new-job')
+    expect(store.getJob('new-job')).toBeDefined()
+  })
+
   it('startPolling updates job status and stops on completed', async () => {
     const queued = makeJob({ status: 'queued' })
     const done = makeJob({ status: 'completed' })

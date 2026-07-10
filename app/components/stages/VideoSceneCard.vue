@@ -115,7 +115,6 @@
       </button>
     </div>
 
-    <span v-if="providerError" class="text-xs text-amber-400/80">{{ providerError }}</span>
   </div>
 </template>
 
@@ -139,7 +138,6 @@ const props = defineProps<{
   generating: boolean
   generatingPrompt?: boolean
   uploading?: boolean
-  providerError?: string
 }>()
 
 const emit = defineEmits<{

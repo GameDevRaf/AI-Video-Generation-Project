@@ -45,6 +45,18 @@ export const useJobsStore = defineStore('jobs', () => {
     return job
   }
 
+  async function retryJob(
+    failedJobId: string,
+    overrides?: { provider?: string; model?: string; input?: Record<string, unknown> },
+  ): Promise<DbJob> {
+    const job = await $fetch<DbJob>(`/api/jobs/${failedJobId}/retry`, {
+      method: 'POST',
+      body: overrides ?? {},
+    })
+    track(job)
+    return job
+  }
+
   function startPolling(id: string, onDone?: (job: DbJob) => void) {
     if (pollers.has(id)) return
     const handle = setInterval(async () => {
@@ -84,6 +96,7 @@ export const useJobsStore = defineStore('jobs', () => {
     isRunning,
     track,
     createJob,
+    retryJob,
     startPolling,
     cancelPoll,
     cancelAll,

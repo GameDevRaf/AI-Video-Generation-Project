@@ -63,7 +63,6 @@
           Cancel
         </button>
       </div>
-      <p v-if="pollerError" class="text-sm text-red-400">{{ pollerError }}</p>
     </div>
 
     <!-- Actions -->
@@ -108,7 +107,8 @@ const text = ref(props.initialText)
 const showRefine = ref(false)
 const refineInstructions = ref('')
 
-const { job, isRunning, error: pollerError, startJob } = useJobPoller()
+const { job, isRunning, startJob, retryJob } = useJobPoller()
+const notifications = useNotificationsStore()
 
 const wordCount = computed(() => countWords(text.value))
 
@@ -127,7 +127,16 @@ const overHardCeiling = computed(() => estimatedSeconds.value > VIDEO_FORMAT.max
 
 // When a refinement job finishes, replace the text with the refined version
 watch(job, (j) => {
+  if (j?.status === 'failed') {
+    notifications.notifyJobError({
+      key: 'script-refine',
+      errorMessage: j.error_message ?? 'Refinement failed.',
+      onRetry: retryRefine,
+    })
+    return
+  }
   if (j?.status !== 'completed') return
+  notifications.dismiss('script-refine')
   const refined = j.job_outputs?.find(o => o.label === 'script_refined')
   if (refined) {
     const content = (refined.metadata as { content?: string } | null)?.content
@@ -147,6 +156,11 @@ async function refine() {
     tone: '',
     idea: '',
   })
+}
+
+async function retryRefine() {
+  if (!job.value) return
+  await retryJob(job.value.id)
 }
 
 async function useScript() {

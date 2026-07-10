@@ -47,6 +47,28 @@ export function useJobPoller() {
     }
   }
 
+  async function retryJob(
+    failedJobId: string,
+    overrides?: { provider?: string; model?: string; input?: Record<string, unknown> },
+  ) {
+    if (starting.value || polling.value) return
+    starting.value = true
+    error.value = null
+
+    try {
+      const created = await $fetch<JobWithOutputs>(`/api/jobs/${failedJobId}/retry`, {
+        method: 'POST',
+        body: overrides ?? {},
+      })
+      job.value = created
+      polling.value = true
+      resume()
+      return created
+    } finally {
+      starting.value = false
+    }
+  }
+
   function reset() {
     pause()
     job.value = null
@@ -64,5 +86,5 @@ export function useJobPoller() {
   const isDone = computed(() => job.value?.status === 'completed')
   const isFailed = computed(() => job.value?.status === 'failed')
 
-  return { job, polling, isRunning, isDone, isFailed, error, startJob, reset }
+  return { job, polling, isRunning, isDone, isFailed, error, startJob, retryJob, reset }
 }

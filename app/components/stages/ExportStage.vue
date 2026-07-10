@@ -49,9 +49,6 @@
         Skip Video Gen enabled — exporting a slideshow from scene images
       </span>
 
-      <p v-if="isFailed" class="text-sm text-red-400">
-        {{ job?.error_message ?? 'Export failed.' }}
-      </p>
     </div>
 
     <div v-if="latestExport" class="flex flex-col gap-4 p-5 rounded-xl border border-white/10 bg-white/3">
@@ -119,7 +116,8 @@ const props = defineProps<{ projectId: string }>()
 
 const projectStore = useProjectStore()
 const { scenes, fetchScenes } = useScenes(toRef(props, 'projectId'))
-const { job, isRunning, isFailed, isDone, startJob } = useJobPoller()
+const { job, isRunning, isDone, startJob, retryJob } = useJobPoller()
+const notifications = useNotificationsStore()
 
 interface ExportRecord {
   id: string
@@ -189,9 +187,20 @@ onMounted(async () => {
 
 watch(isDone, async (done) => {
   if (!done) return
+  notifications.dismiss('export')
   await Promise.all([loadExports(), loadCurrentMedia()])
   dataLoaded.value = true
   exportMismatchSnapshot.value = exportMismatch.value
+})
+
+watch(job, (j) => {
+  if (j?.status === 'failed') {
+    notifications.notifyJobError({
+      key: 'export',
+      errorMessage: j.error_message ?? 'Export failed.',
+      onRetry: retry,
+    })
+  }
 })
 
 async function loadExports() {
@@ -219,6 +228,11 @@ async function loadCurrentMedia() {
 async function startExport() {
   await loadCurrentMedia()
   await startJob(props.projectId, 'export', {})
+}
+
+async function retry() {
+  if (!job.value) return
+  await retryJob(job.value.id)
 }
 
 function openExportPreview() {

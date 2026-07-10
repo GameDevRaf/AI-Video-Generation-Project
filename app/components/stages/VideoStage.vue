@@ -55,8 +55,8 @@
         Skip Video Gen
       </button>
 
-      <p v-if="promptsError || videosError || skipVideoGenError" class="text-sm text-amber-400/80 basis-full">
-        {{ promptsError ?? videosError ?? skipVideoGenError }}
+      <p v-if="skipVideoGenError" class="text-sm text-amber-400/80 basis-full">
+        {{ skipVideoGenError }}
       </p>
     </div>
 
@@ -118,7 +118,6 @@
         :generating="generatingSceneId === scene.id"
         :generating-prompt="singlePromptRunning && regeneratingPromptSceneId === scene.id"
         :uploading="uploadingSceneId === scene.id"
-        :provider-error="generatingSceneId === scene.id || uploadingSceneId === scene.id ? providerError : undefined"
         @save-prompt="videoStage.savePrompt"
         @generate-video="generateSingleVideo"
         @regenerate-prompt="generateSinglePrompt"
@@ -156,23 +155,29 @@ defineEmits<{ done: [] }>()
 
 const projectStore = useProjectStore()
 const jobsStore = useJobsStore()
+const notifications = useNotificationsStore()
 
 const { scenes, loading: scenesLoading, fetchScenes } = useScenes(toRef(props, 'projectId'))
 const videoStage = useVideoStage(toRef(props, 'projectId'))
 const imageStage = useImageStage(toRef(props, 'projectId'))
 
-const { job: promptsJob, isRunning: promptsRunning, error: promptsError, startJob: startPromptsJob } = useJobPoller()
+const { job: promptsJob, isRunning: promptsRunning, startJob: startPromptsJob, retryJob: retryPromptsJobPoller } = useJobPoller()
 const { job: singlePromptJob, isRunning: singlePromptRunning, startJob: startSinglePromptJob } = useJobPoller()
-const { job: videoJob, isRunning: videosRunning, error: videosError, startJob: startVideoJob } = useJobPoller()
+const { job: videoJob, isRunning: videosRunning, startJob: startVideoJob, retryJob: retryVideoJobPoller } = useJobPoller()
 
 const activeSceneId = ref<string | null>(null)
 const generatingSceneId = ref<string | null>(null)
 const generatingAllVideos = ref(false)
 const regeneratingPromptSceneId = ref<string | null>(null)
 const uploadingSceneId = ref<string | null>(null)
-const providerError = ref<string | undefined>(undefined)
+const failedBulkVideoJobs = ref<{ sceneId: string; jobId: string }[]>([])
 const previewSceneId = ref<string | null>(null)
 const dataLoaded = ref(false)
+
+function sceneLabelFor(sceneId: string): string {
+  const scene = scenes.value.find(s => s.id === sceneId)
+  return scene ? `Scene ${scene.order_index + 1}` : 'Scene'
+}
 
 const skipVideoGen = computed(() => projectStore.settings?.skip_video_gen ?? false)
 const skipVideoGenError = ref<string | undefined>(undefined)
@@ -194,7 +199,16 @@ onMounted(async () => {
 })
 
 watch(promptsJob, async (j) => {
-  if (j?.status === 'completed') await videoStage.fetchPrompts()
+  if (j?.status === 'completed') {
+    notifications.dismiss('video-prompts')
+    await videoStage.fetchPrompts()
+  } else if (j?.status === 'failed') {
+    notifications.notifyJobError({
+      key: 'video-prompts',
+      errorMessage: j.error_message ?? 'Prompt generation failed.',
+      onRetry: retryPromptsJob,
+    })
+  }
 })
 
 watch(singlePromptJob, async (j) => {
@@ -208,11 +222,20 @@ watch(singlePromptJob, async (j) => {
 
 // After a single video job finishes, reload videos and clear the loading state
 watch(videoJob, async (j) => {
+  const sceneId = generatingSceneId.value
   if (j?.status === 'completed') {
+    if (sceneId) notifications.dismiss(`video:${sceneId}`)
     await videoStage.fetchVideos()
     generatingSceneId.value = null
   } else if (j?.status === 'failed') {
-    providerError.value = j.error_message ?? 'Video generation failed.'
+    if (sceneId) {
+      notifications.notifyJobError({
+        key: `video:${sceneId}`,
+        errorMessage: j.error_message ?? 'Video generation failed.',
+        sceneLabel: sceneLabelFor(sceneId),
+        onRetry: () => retryVideo(sceneId),
+      })
+    }
     generatingSceneId.value = null
   }
 })
@@ -243,6 +266,8 @@ async function generateAllVideos() {
   if (!targets.length) return
 
   generatingAllVideos.value = true
+  notifications.dismiss('video-bulk')
+  failedBulkVideoJobs.value = []
   // Fire all video jobs in parallel (each takes 60–120 s; sequential would be too slow).
   // Server-side dedup returns any already-queued job instead of creating a duplicate.
   const provider = projectStore.settings?.default_video_provider ?? undefined
@@ -252,9 +277,20 @@ async function generateAllVideos() {
   // only confirms the job was queued, not that generation finished, so the button must
   // stay disabled/loading and previews must refresh as each job actually completes.
   let remaining = targets.length
-  function settleOne() {
+  let hadFailure = false
+  function settleOne(failed: boolean) {
+    if (failed) hadFailure = true
     remaining -= 1
-    if (remaining === 0) generatingAllVideos.value = false
+    if (remaining === 0) {
+      generatingAllVideos.value = false
+      if (hadFailure) {
+        notifications.notifySummary({
+          key: 'video-bulk',
+          message: 'Some videos failed to generate.',
+          onRetry: retryFailedBulkVideos,
+        })
+      }
+    }
   }
 
   await Promise.all(targets.map(async (s) => {
@@ -270,18 +306,71 @@ async function generateAllVideos() {
         ...(model ? { model } : {}),
       })
       jobsStore.startPolling(job.id, (finishedJob) => {
-        const refreshed = finishedJob.status === 'completed' ? videoStage.fetchVideos().catch(() => {}) : Promise.resolve()
-        refreshed.then(() => settleOne())
+        const failed = finishedJob.status !== 'completed'
+        if (failed) failedBulkVideoJobs.value = [...failedBulkVideoJobs.value, { sceneId: s.id, jobId: finishedJob.id }]
+        const refreshed = failed ? Promise.resolve() : videoStage.fetchVideos().catch(() => {})
+        refreshed.then(() => settleOne(failed))
       })
     } catch {
-      settleOne()
+      settleOne(true)
     }
   }))
 }
 
+async function retryFailedBulkVideos() {
+  if (generatingAllVideos.value || !failedBulkVideoJobs.value.length) return
+  const toRetry = failedBulkVideoJobs.value
+  failedBulkVideoJobs.value = []
+  notifications.dismiss('video-bulk')
+  generatingAllVideos.value = true
+
+  let remaining = toRetry.length
+  let hadFailure = false
+  function settleOne(failed: boolean) {
+    if (failed) hadFailure = true
+    remaining -= 1
+    if (remaining === 0) {
+      generatingAllVideos.value = false
+      if (hadFailure) {
+        notifications.notifySummary({
+          key: 'video-bulk',
+          message: 'Some videos failed to generate.',
+          onRetry: retryFailedBulkVideos,
+        })
+      }
+    }
+  }
+
+  await Promise.all(toRetry.map(async ({ sceneId, jobId }) => {
+    try {
+      const job = await jobsStore.retryJob(jobId)
+      jobsStore.startPolling(job.id, (finishedJob) => {
+        const failed = finishedJob.status !== 'completed'
+        if (failed) failedBulkVideoJobs.value = [...failedBulkVideoJobs.value, { sceneId, jobId: finishedJob.id }]
+        const refreshed = failed ? Promise.resolve() : videoStage.fetchVideos().catch(() => {})
+        refreshed.then(() => settleOne(failed))
+      })
+    } catch {
+      failedBulkVideoJobs.value = [...failedBulkVideoJobs.value, { sceneId, jobId }]
+      settleOne(true)
+    }
+  }))
+}
+
+async function retryPromptsJob() {
+  if (!promptsJob.value) return
+  await retryPromptsJobPoller(promptsJob.value.id)
+}
+
+async function retryVideo(sceneId: string) {
+  if (!videoJob.value) return
+  generatingSceneId.value = sceneId
+  await retryVideoJobPoller(videoJob.value.id)
+}
+
 async function generateSingleVideo(sceneId: string, prompt: string) {
   generatingSceneId.value = sceneId
-  providerError.value = undefined
+  notifications.dismiss(`video:${sceneId}`)
   const provider = projectStore.settings?.default_video_provider ?? undefined
   const model = projectStore.settings?.default_video_model ?? undefined
   const scene = scenes.value.find(s => s.id === sceneId)
@@ -298,14 +387,19 @@ async function generateSingleVideo(sceneId: string, prompt: string) {
     })
     // generatingSceneId is cleared by the videoJob watcher once status is terminal
   } catch {
-    providerError.value = 'Failed to start video job.'
+    notifications.notifyJobError({
+      key: `video:${sceneId}`,
+      errorMessage: 'Failed to start video job.',
+      sceneLabel: sceneLabelFor(sceneId),
+      onRetry: () => generateSingleVideo(sceneId, prompt),
+    })
     generatingSceneId.value = null
   }
 }
 
 async function uploadVideo(sceneId: string, file: File) {
   uploadingSceneId.value = sceneId
-  providerError.value = undefined
+  notifications.dismiss(`video:${sceneId}`)
   try {
     const formData = new FormData()
     formData.append('projectId', props.projectId)
@@ -320,7 +414,11 @@ async function uploadVideo(sceneId: string, file: File) {
     await videoStage.fetchVideos()
     activeSceneId.value = sceneId
   } catch (error) {
-    providerError.value = error instanceof Error ? error.message : 'Video upload failed.'
+    notifications.notifyJobError({
+      key: `video:${sceneId}`,
+      errorMessage: error instanceof Error ? error.message : 'Video upload failed.',
+      sceneLabel: sceneLabelFor(sceneId),
+    })
   } finally {
     uploadingSceneId.value = null
   }

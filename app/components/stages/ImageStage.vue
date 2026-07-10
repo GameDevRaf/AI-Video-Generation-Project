@@ -40,10 +40,6 @@
         <span v-else>{{ hasAnyImage ? 'Regenerate all images' : 'Generate all images' }}</span>
       </button>
 
-      <p v-if="promptsJob?.status === 'failed'" class="text-sm text-red-400">
-        {{ promptsJob.error_message ?? 'Prompt generation failed.' }}
-      </p>
-      <p v-if="allImagesError" class="text-sm text-amber-400/80">{{ allImagesError }}</p>
     </div>
 
     <!-- Scene grid -->
@@ -62,7 +58,6 @@
         :generating="generatingSceneId === scene.id"
         :generating-prompt="promptsRunning || singlePromptRunning && regeneratingPromptSceneId === scene.id"
         :uploading="uploadingSceneId === scene.id"
-        :provider-error="imageProviderError"
         @save-prompt="imageStage.savePrompt"
         @generate-image="generateImage"
         @regenerate-prompt="generateSinglePrompt"
@@ -102,26 +97,31 @@ defineEmits<{ done: [] }>()
 
 const projectStore = useProjectStore()
 const jobsStore = useJobsStore()
+const notifications = useNotificationsStore()
 
 const { scenes, loading: scenesLoading, fetchScenes } = useScenes(toRef(props, 'projectId'))
 const imageStage = useImageStage(toRef(props, 'projectId'))
 
-const { job: promptsJob, isRunning: promptsRunning, startJob: startPromptsJob } = useJobPoller()
+const { job: promptsJob, isRunning: promptsRunning, startJob: startPromptsJob, retryJob: retryPromptsJobPoller } = useJobPoller()
 const { job: singlePromptJob, isRunning: singlePromptRunning, startJob: startSinglePromptJob } = useJobPoller()
-const { job: imageJob, isRunning: imageJobRunning, startJob: startImageJob } = useJobPoller()
+const { job: imageJob, isRunning: imageJobRunning, startJob: startImageJob, retryJob: retryImageJobPoller } = useJobPoller()
 
 const generatingSceneId = ref<string | null>(null)
 const generatingAllImages = ref(false)
 const regeneratingPromptSceneId = ref<string | null>(null)
 const uploadingSceneId = ref<string | null>(null)
-const imageProviderError = ref<string | undefined>(undefined)
-const allImagesError = ref<string | undefined>(undefined)
+const failedBulkJobs = ref<{ sceneId: string; jobId: string }[]>([])
 const previewSceneId = ref<string | null>(null)
 const dataLoaded = ref(false)
 
 const promptEditMode = computed(() => props.promptEditMode ?? 'after_generation')
 const hasAnyPrompt = computed(() => imageStage.prompts.value.size > 0)
 const hasAnyImage = computed(() => imageStage.images.value.size > 0)
+
+function sceneLabelFor(sceneId: string): string {
+  const scene = scenes.value.find(s => s.id === sceneId)
+  return scene ? `Scene ${scene.order_index + 1}` : 'Scene'
+}
 
 onMounted(async () => {
   await fetchScenes()
@@ -132,7 +132,14 @@ onMounted(async () => {
 // After bulk prompt job finishes, reload prompts
 watch(promptsJob, async (j) => {
   if (j?.status === 'completed') {
+    notifications.dismiss('image-prompts')
     await imageStage.fetchPrompts()
+  } else if (j?.status === 'failed') {
+    notifications.notifyJobError({
+      key: 'image-prompts',
+      errorMessage: j.error_message ?? 'Prompt generation failed.',
+      onRetry: retryPromptsJob,
+    })
   }
 })
 
@@ -148,11 +155,20 @@ watch(singlePromptJob, async (j) => {
 
 // After a single image job finishes, reload images and clear the loading state
 watch(imageJob, async (j) => {
+  const sceneId = generatingSceneId.value
   if (j?.status === 'completed') {
+    if (sceneId) notifications.dismiss(`image:${sceneId}`)
     await imageStage.fetchImages()
     generatingSceneId.value = null
   } else if (j?.status === 'failed') {
-    imageProviderError.value = j.error_message ?? 'Image generation failed.'
+    if (sceneId) {
+      notifications.notifyJobError({
+        key: `image:${sceneId}`,
+        errorMessage: j.error_message ?? 'Image generation failed.',
+        sceneLabel: sceneLabelFor(sceneId),
+        onRetry: () => retryImage(sceneId),
+      })
+    }
     generatingSceneId.value = null
   }
 })
@@ -177,9 +193,20 @@ async function generateSinglePrompt(sceneId: string) {
   })
 }
 
+async function retryPromptsJob() {
+  if (!promptsJob.value) return
+  await retryPromptsJobPoller(promptsJob.value.id)
+}
+
+async function retryImage(sceneId: string) {
+  if (!imageJob.value) return
+  generatingSceneId.value = sceneId
+  await retryImageJobPoller(imageJob.value.id)
+}
+
 async function generateImage(sceneId: string, prompt: string) {
   generatingSceneId.value = sceneId
-  imageProviderError.value = undefined
+  notifications.dismiss(`image:${sceneId}`)
   const provider = projectStore.settings?.default_image_provider ?? undefined
   const model = projectStore.settings?.default_image_model ?? undefined
   try {
@@ -191,7 +218,12 @@ async function generateImage(sceneId: string, prompt: string) {
     })
     // generatingSceneId is cleared by the imageJob watcher once status is terminal
   } catch {
-    imageProviderError.value = 'Failed to start image job.'
+    notifications.notifyJobError({
+      key: `image:${sceneId}`,
+      errorMessage: 'Failed to start image job.',
+      sceneLabel: sceneLabelFor(sceneId),
+      onRetry: () => generateImage(sceneId, prompt),
+    })
     generatingSceneId.value = null
   }
 }
@@ -202,7 +234,8 @@ async function generateAllImages() {
   if (!targets.length) return
 
   generatingAllImages.value = true
-  allImagesError.value = undefined
+  notifications.dismiss('image-bulk')
+  failedBulkJobs.value = []
   const provider = projectStore.settings?.default_image_provider ?? undefined
   const model = projectStore.settings?.default_image_model ?? undefined
 
@@ -216,7 +249,13 @@ async function generateAllImages() {
     remaining -= 1
     if (remaining === 0) {
       generatingAllImages.value = false
-      if (hadFailure) allImagesError.value = 'Some images failed to generate.'
+      if (hadFailure) {
+        notifications.notifySummary({
+          key: 'image-bulk',
+          message: 'Some images failed to generate.',
+          onRetry: retryFailedBulkImages,
+        })
+      }
     }
   }
 
@@ -230,6 +269,7 @@ async function generateAllImages() {
       })
       jobsStore.startPolling(job.id, (finishedJob) => {
         const failed = finishedJob.status !== 'completed'
+        if (failed) failedBulkJobs.value = [...failedBulkJobs.value, { sceneId: s.id, jobId: finishedJob.id }]
         const refreshed = failed ? Promise.resolve() : imageStage.fetchImages().catch(() => {})
         refreshed.then(() => settleOne(failed))
       })
@@ -239,9 +279,49 @@ async function generateAllImages() {
   }))
 }
 
+async function retryFailedBulkImages() {
+  if (generatingAllImages.value || !failedBulkJobs.value.length) return
+  const toRetry = failedBulkJobs.value
+  failedBulkJobs.value = []
+  notifications.dismiss('image-bulk')
+  generatingAllImages.value = true
+
+  let remaining = toRetry.length
+  let hadFailure = false
+  function settleOne(failed: boolean) {
+    if (failed) hadFailure = true
+    remaining -= 1
+    if (remaining === 0) {
+      generatingAllImages.value = false
+      if (hadFailure) {
+        notifications.notifySummary({
+          key: 'image-bulk',
+          message: 'Some images failed to generate.',
+          onRetry: retryFailedBulkImages,
+        })
+      }
+    }
+  }
+
+  await Promise.all(toRetry.map(async ({ sceneId, jobId }) => {
+    try {
+      const job = await jobsStore.retryJob(jobId)
+      jobsStore.startPolling(job.id, (finishedJob) => {
+        const failed = finishedJob.status !== 'completed'
+        if (failed) failedBulkJobs.value = [...failedBulkJobs.value, { sceneId, jobId: finishedJob.id }]
+        const refreshed = failed ? Promise.resolve() : imageStage.fetchImages().catch(() => {})
+        refreshed.then(() => settleOne(failed))
+      })
+    } catch {
+      failedBulkJobs.value = [...failedBulkJobs.value, { sceneId, jobId }]
+      settleOne(true)
+    }
+  }))
+}
+
 async function uploadImage(sceneId: string, file: File) {
   uploadingSceneId.value = sceneId
-  imageProviderError.value = undefined
+  notifications.dismiss(`image:${sceneId}`)
   try {
     const formData = new FormData()
     formData.append('projectId', props.projectId)
@@ -255,7 +335,11 @@ async function uploadImage(sceneId: string, file: File) {
     })
     await imageStage.fetchImages()
   } catch (error) {
-    imageProviderError.value = error instanceof Error ? error.message : 'Image upload failed.'
+    notifications.notifyJobError({
+      key: `image:${sceneId}`,
+      errorMessage: error instanceof Error ? error.message : 'Image upload failed.',
+      sceneLabel: sceneLabelFor(sceneId),
+    })
   } finally {
     uploadingSceneId.value = null
   }

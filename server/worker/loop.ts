@@ -11,7 +11,6 @@ import { handleExportJob } from './handlers/export'
 import type { DbJob, JobType } from '../../app/types/database.types'
 
 const POLL_INTERVAL_MS = 3000
-const MAX_RETRIES = 3
 
 const handlers: Record<JobType, (job: DbJob) => Promise<void>> = {
   script: handleScriptJob,
@@ -48,7 +47,14 @@ async function claimNextJob(): Promise<DbJob | null> {
   return claimed as DbJob | null
 }
 
-async function processJob(job: DbJob) {
+// Superthread 98: a provider failure fails the job immediately (one attempt, no
+// automatic retry) so a bad key or transient error doesn't silently re-spend
+// credits/tokens up to 3 more times before the user ever sees it. The `retrying`
+// status is kept in the DB/type union for backwards compatibility (claimNextJob
+// still claims rows in that status) but this loop never writes it anymore — the
+// only way back to `queued` is POST /api/jobs/:id/retry (server/utils/jobCreation.ts).
+// A future bounded auto-retry policy would reintroduce a `retrying` transition here.
+export async function processJob(job: DbJob) {
   console.log(`[worker] Processing job ${job.id} (${job.type})`)
   const handler = handlers[job.type as JobType]
 
@@ -63,15 +69,7 @@ async function processJob(job: DbJob) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`[worker] Job ${job.id} failed:`, msg)
-
-    const nextRetry = (job.retry_count ?? 0) + 1
-    if (nextRetry <= MAX_RETRIES) {
-      await updateJobStatus(job.id, 'retrying', { error_message: msg, retry_count: nextRetry })
-      console.log(`[worker] Job ${job.id} scheduled for retry ${nextRetry}/${MAX_RETRIES}`)
-    } else {
-      await updateJobStatus(job.id, 'failed', { error_message: msg })
-      console.log(`[worker] Job ${job.id} permanently failed after ${MAX_RETRIES} retries`)
-    }
+    await updateJobStatus(job.id, 'failed', { error_message: msg, retry_count: (job.retry_count ?? 0) + 1 })
   }
 }
 

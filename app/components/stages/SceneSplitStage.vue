@@ -30,10 +30,6 @@
       <span v-if="scenes.length" class="text-sm text-gray-500">
         {{ scenes.length }} scenes · {{ formatTime(totalDuration) }} total
       </span>
-
-      <p v-if="isFailed" class="text-sm text-red-400">
-        {{ pollerError ?? job?.error_message ?? 'Scene split failed.' }}
-      </p>
     </div>
 
     <!-- Scene cards -->
@@ -73,7 +69,8 @@ const props = defineProps<{ projectId: string; scriptText: string }>()
 defineEmits<{ done: [] }>()
 
 const projectStore = useProjectStore()
-const { job, isRunning, isFailed, error: pollerError, startJob } = useJobPoller()
+const { job, isRunning, startJob, retryJob } = useJobPoller()
+const notifications = useNotificationsStore()
 const {
   scenes, loading: scenesLoading, totalDuration,
   fetchScenes, updateScene, moveScene, deleteScene: deleteSceneApi, createScene: createSceneApi,
@@ -98,9 +95,18 @@ async function createScene() {
 // Load existing scenes on mount (if a previous split was done)
 onMounted(fetchScenes)
 
-// Refresh scene list when the split job completes
+// Refresh scene list when the split job completes; surface failures as a toast
 watch(job, async (j) => {
-  if (j?.status === 'completed') await fetchScenes()
+  if (j?.status === 'completed') {
+    notifications.dismiss('scene_split')
+    await fetchScenes()
+  } else if (j?.status === 'failed') {
+    notifications.notifyJobError({
+      key: 'scene_split',
+      errorMessage: j.error_message ?? 'Scene split failed.',
+      onRetry: retry,
+    })
+  }
 })
 
 async function splitScenes() {
@@ -111,6 +117,11 @@ async function splitScenes() {
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
   })
+}
+
+async function retry() {
+  if (!job.value) return
+  await retryJob(job.value.id)
 }
 
 function formatTime(seconds: number): string {

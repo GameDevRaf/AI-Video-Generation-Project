@@ -105,7 +105,7 @@ describe('image handler', () => {
     expect(mockUpdateJobStatus).toHaveBeenCalledWith('job-img-1', 'completed', expect.anything())
   })
 
-  it('propagates error from provider (worker retry loop handles it)', async () => {
+  it('propagates error from provider (loop.ts fails the job — no automatic retry)', async () => {
     mockImageGenerate.mockRejectedValueOnce(new Error('Provider quota exceeded'))
     const { handleImageJob } = await import('../../../server/worker/handlers/image')
     await expect(

@@ -10,6 +10,7 @@ const PROTECTED_ENDPOINTS: Array<{ method: string; path: string; body?: Record<s
   { method: 'POST', path: '/api/projects', body: { name: 'Test' } },
   { method: 'GET', path: '/api/jobs' },
   { method: 'POST', path: '/api/jobs', body: { projectId: 'x', type: 'script', input: {} } },
+  { method: 'POST', path: '/api/jobs/x/retry', body: {} },
   { method: 'GET', path: '/api/settings' },
   { method: 'PATCH', path: '/api/settings', body: {} },
   { method: 'GET', path: '/api/provider/keys' },

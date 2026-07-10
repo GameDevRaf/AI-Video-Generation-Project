@@ -86,7 +86,6 @@
           </button>
         </div>
 
-        <p v-if="pollerError" class="text-sm text-red-400">{{ pollerError }}</p>
         <p v-if="targetDurationError" class="text-sm text-amber-400/80">{{ targetDurationError }}</p>
       </div>
 
@@ -171,7 +170,20 @@ async function setTargetDuration(seconds: number) {
   }
 }
 
-const { job, isRunning, error: pollerError, startJob } = useJobPoller()
+const { job, isRunning, startJob, retryJob } = useJobPoller()
+const notifications = useNotificationsStore()
+
+watch(job, (j) => {
+  if (j?.status === 'failed') {
+    notifications.notifyJobError({
+      key: 'script',
+      errorMessage: j.error_message ?? 'Script generation failed.',
+      onRetry: retry,
+    })
+  } else if (j?.status === 'completed') {
+    notifications.dismiss('script')
+  }
+})
 
 const isLocked = computed(() => projectStore.currentStage !== 'script')
 const finalizedWordCount = computed(() =>
@@ -214,6 +226,11 @@ async function generate() {
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
   })
+}
+
+async function retry() {
+  if (!job.value) return
+  await retryJob(job.value.id)
 }
 
 function onRegenerate() {
