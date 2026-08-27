@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
+import { randomBytes } from 'node:crypto'
 
 dotenv.config()
 
@@ -19,7 +20,7 @@ test.describe('Happy Path: Auth, Dashboard, Project Creation & Settings', () => 
 
     // Pre-create user to ensure they are confirmed
     const email = `e2e-user-${Date.now()}@example.com`
-    const password = 'SecurePassword123!'
+    const password = randomBytes(24).toString('base64url')
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,

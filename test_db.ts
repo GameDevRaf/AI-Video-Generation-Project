@@ -1,14 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
+import { randomBytes } from 'node:crypto'
 
 dotenv.config()
 
 const supabaseUrl = process.env.SUPABASE_URL
 const publicSubKey = process.env.NUXT_PUBLIC_SUPABASE_KEY
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-console.log('URL:', supabaseUrl)
-console.log('NUXT_PUBLIC_SUPABASE_KEY:', publicSubKey)
 
 if (!supabaseUrl || !publicSubKey) {
   console.error('Missing URL or NUXT_PUBLIC_SUPABASE_KEY')
@@ -20,7 +18,7 @@ async function run() {
   
   // Create a temporary test user
   const email = `test-${Date.now()}@example.com`
-  const password = 'TestPassword123!'
+  const password = randomBytes(24).toString('base64url')
   
   console.log(`Creating test user: ${email}`)
   const { data: authData, error: createError } = await supabaseAdmin.auth.admin.createUser({
