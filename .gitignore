@@ -28,3 +28,6 @@ test-results/
 playwright-report/
 blob-report/
 coverage/
+
+# Local history backups
+*.bundle

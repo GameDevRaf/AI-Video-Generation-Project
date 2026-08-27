@@ -37,7 +37,7 @@ export const useJobsStore = defineStore('jobs', () => {
     type: string,
     input: Record<string, unknown>,
   ): Promise<DbJob> {
-    const job = await $fetch<DbJob>('/api/jobs', {
+    const job = await globalThis.$fetch<DbJob>('/api/jobs', {
       method: 'POST',
       body: { projectId, type, input },
     })
@@ -49,7 +49,7 @@ export const useJobsStore = defineStore('jobs', () => {
     failedJobId: string,
     overrides?: { provider?: string; model?: string; input?: Record<string, unknown> },
   ): Promise<DbJob> {
-    const job = await $fetch<DbJob>(`/api/jobs/${failedJobId}/retry`, {
+    const job = await globalThis.$fetch<DbJob>(`/api/jobs/${failedJobId}/retry`, {
       method: 'POST',
       body: overrides ?? {},
     })
@@ -61,7 +61,7 @@ export const useJobsStore = defineStore('jobs', () => {
     if (pollers.has(id)) return
     const handle = setInterval(async () => {
       try {
-        const job = await $fetch<DbJob>(`/api/jobs/${id}`)
+        const job = await globalThis.$fetch<DbJob>(`/api/jobs/${id}`)
         track(job)
         if (job.status === 'completed' || job.status === 'failed') {
           clearInterval(handle)

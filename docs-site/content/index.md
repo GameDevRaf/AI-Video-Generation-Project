@@ -1,19 +1,19 @@
 ---
-title: Vira Docs
-description: Developer documentation for Vira.
+title: AI Video Generation Project Docs
+description: Developer documentation for the AI Video Generation Project.
 seo:
-  title: Vira Docs
-  description: Developer documentation for Vira.
+  title: AI Video Generation Project Docs
+  description: Developer documentation for the AI Video Generation Project.
 ---
 
 ::u-page-hero
 #title
-Vira Docs
+AI Video Generation Project Docs
 
 #description
 Developer documentation for a Nuxt 4 app that turns a text idea into a finished short-form video: script, scenes, images, voiceover, video clips, and final MP4.
 
-These docs are written for Python-friendly developers who are new to web development, and detailed enough for AI coding assistants to navigate the codebase safely.
+These docs are written for developers who are new to web development and detailed enough to navigate the codebase safely.
 
 #links
   :::u-button

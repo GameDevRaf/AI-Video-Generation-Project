@@ -41,7 +41,7 @@ describe('useSceneOrderSync', () => {
     const sync = useSceneOrderSync(projectId)
     const original = [makeScene('s1', 0), makeScene('s2', 1)]
     const reordered = [makeScene('s2', 0), makeScene('s1', 1)]
-    const fetchMock = vi.mocked($fetch)
+    const fetchMock = vi.mocked(globalThis.$fetch)
 
     sync.registerFetchedScenes(original)
     sync.stagePendingReorder(reordered)
@@ -77,7 +77,7 @@ describe('useSceneOrderSync', () => {
     const sync = useSceneOrderSync(projectId)
     const original = [makeScene('s1', 0), makeScene('s2', 1)]
     const reordered = [makeScene('s2', 0), makeScene('s1', 1)]
-    const fetchMock = vi.mocked($fetch)
+    const fetchMock = vi.mocked(globalThis.$fetch)
 
     sync.registerFetchedScenes(original)
     sync.stagePendingReorder(reordered)

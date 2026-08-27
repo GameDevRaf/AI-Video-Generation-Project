@@ -47,7 +47,7 @@ async function claimNextJob(): Promise<DbJob | null> {
   return claimed as DbJob | null
 }
 
-// Superthread 98: a provider failure fails the job immediately (one attempt, no
+// A provider failure fails the job immediately (one attempt, no
 // automatic retry) so a bad key or transient error doesn't silently re-spend
 // credits/tokens up to 3 more times before the user ever sees it. The `retrying`
 // status is kept in the DB/type union for backwards compatibility (claimNextJob

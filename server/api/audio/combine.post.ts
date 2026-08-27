@@ -5,10 +5,11 @@ import { join } from 'node:path'
 import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
 import { adminSupabase } from '../../worker/lib/supabase'
 import { downloadToFile, extensionFromUrl, runFfmpeg } from '../../utils/ffmpeg'
+import { createSignedAssetUrl } from '../../utils/storage'
 
 interface AudioOutputRow {
   label: string | null
-  storage_url: string | null
+  storage_path: string | null
 }
 
 function getSceneOrderSignature(scenes: { id: string; script_text: string }[]) {
@@ -54,19 +55,19 @@ export default defineEventHandler(async (event) => {
   // Fetch latest per-scene audio outputs
   const { data: outputs } = await adminSupabase
     .from('job_outputs')
-    .select('label, storage_url')
+    .select('label, storage_path')
     .eq('project_id', projectId)
     .eq('type', 'audio')
     .like('label', 'scene_audio_%')
-    .not('storage_url', 'is', null)
+    .not('storage_path', 'is', null)
     .order('created_at', { ascending: false })
 
-  // Build map: sceneId → URL (first = latest per scene)
+  // Build map: sceneId → storage path (first = latest per scene)
   const audioMap = new Map<string, string>()
   for (const row of (outputs ?? []) as AudioOutputRow[]) {
     const sceneId = row.label?.replace('scene_audio_', '') ?? ''
-    if (sceneId && !audioMap.has(sceneId) && row.storage_url) {
-      audioMap.set(sceneId, row.storage_url)
+    if (sceneId && !audioMap.has(sceneId) && row.storage_path) {
+      audioMap.set(sceneId, row.storage_path)
     }
   }
 
@@ -84,7 +85,7 @@ export default defineEventHandler(async (event) => {
     // Download each scene's audio in scene order
     const audioPaths: string[] = []
     for (const scene of scenes) {
-      const url = audioMap.get(scene.id)!
+      const url = await createSignedAssetUrl(adminSupabase, audioMap.get(scene.id)!)
       const ext = extensionFromUrl(url, 'mp3')
       const path = join(tempDir, `scene-${scene.order_index}.${ext}`)
       await downloadToFile(url, path)
@@ -115,8 +116,7 @@ export default defineEventHandler(async (event) => {
 
     if (uploadErr) throw createError({ statusCode: 500, message: uploadErr.message })
 
-    const { data: urlData } = supabase.storage.from('assets').getPublicUrl(storageKey)
-    const storageUrl = urlData.publicUrl
+    const storageUrl = await createSignedAssetUrl(supabase, storageKey)
 
     // Create a completed job record so job_outputs FK is satisfied
     const { data: combineJob, error: jobErr } = await supabase
@@ -142,7 +142,7 @@ export default defineEventHandler(async (event) => {
       project_id: projectId,
       type: 'audio',
       label: 'voice_track',
-      storage_url: storageUrl,
+      storage_url: null,
       storage_path: storageKey,
       mime_type: 'audio/mpeg',
       metadata: {

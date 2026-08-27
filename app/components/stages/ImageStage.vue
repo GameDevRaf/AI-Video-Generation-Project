@@ -329,7 +329,7 @@ async function uploadImage(sceneId: string, file: File) {
     formData.append('type', 'image')
     formData.append('file', file)
 
-    await $fetch('/api/uploads/media', {
+    await globalThis.$fetch('/api/uploads/media', {
       method: 'POST',
       body: formData,
     })

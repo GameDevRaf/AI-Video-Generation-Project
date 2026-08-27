@@ -23,6 +23,9 @@ vi.mock('../../../server/worker/lib/jobs', () => ({
 
 vi.mock('../../../server/worker/lib/supabase', () => ({ adminSupabase: {} }))
 
+const mockCreateSignedAssetUrl = vi.fn().mockResolvedValue('https://signed/assets/image.png')
+vi.mock('../../../server/utils/storage', () => ({ createSignedAssetUrl: mockCreateSignedAssetUrl }))
+
 const VIDEO_BUFFER = Buffer.from('MP4_DATA')
 
 const BASE_JOB = {
@@ -89,6 +92,19 @@ describe('video handler', () => {
     const { handleVideoJob } = await import('../../../server/worker/handlers/video')
     await handleVideoJob({ ...BASE_JOB, input: { scene_id: 'sc-1', prompt: 'Mountain' } } as never)
     expect(mockUpdateJobStatus).toHaveBeenCalledWith('job-vid-1', 'completed', expect.anything())
+  })
+
+  it('signs a canonical internal image path immediately before provider use', async () => {
+    mockVideoGenerate.mockResolvedValueOnce({ videoUrl: 'https://cdn/video.mp4' })
+    mockFetchVideo()
+    const { handleVideoJob } = await import('../../../server/worker/handlers/video')
+    await handleVideoJob({
+      ...BASE_JOB,
+      input: { scene_id: 'sc-1', prompt: 'Ocean wave', image_path: 'proj-1/images/scene.png' },
+    } as never)
+
+    expect(mockCreateSignedAssetUrl).toHaveBeenCalledWith({}, 'proj-1/images/scene.png')
+    expect(mockVideoGenerate).toHaveBeenCalledWith(expect.objectContaining({ imageUrl: 'https://signed/assets/image.png' }))
   })
 
   it('propagates error from provider', async () => {

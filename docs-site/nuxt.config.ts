@@ -3,7 +3,7 @@ export default defineNuxtConfig({
   modules: ['@barzhsieh/nuxt-content-mermaid'],
   css: ['~~/assets/css/mermaid.css'],
   site: {
-    name: 'Vira',
+    name: 'AI Video Generation Project',
   },
   contentMermaid: {
     enabled: true,

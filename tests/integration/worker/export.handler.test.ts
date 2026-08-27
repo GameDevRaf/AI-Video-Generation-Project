@@ -29,6 +29,20 @@ vi.mock('../../../server/worker/lib/jobs', () => ({
   updateJobStatus: mockUpdateJobStatus,
 }))
 
+const signedUrls: Record<string, string> = {
+  'proj-1/videos/v1.mp4': 'https://cdn/v1.mp4',
+  'proj-1/videos/v2.mp4': 'https://cdn/v2.mp4',
+  'proj-1/images/i1.png': 'https://cdn/i1.png',
+  'proj-1/images/i2.png': 'https://cdn/i2.png',
+  'proj-1/audio/a1.mp3': 'https://cdn/a1.mp3',
+  'proj-1/audio/a2.mp3': 'https://cdn/a2.mp3',
+  'proj-1/audio/voice.mp3': 'https://cdn/voice.mp3',
+}
+const mockCreateSignedAssetUrl = vi.fn(async (_client: unknown, path: string) => signedUrls[path] ?? `https://signed.test/${path}`)
+vi.mock('../../../server/utils/storage', () => ({
+  createSignedAssetUrl: mockCreateSignedAssetUrl,
+}))
+
 // ── adminSupabase mock ────────────────────────────────────────────────────────
 
 // Builds a fluent Supabase query chain that resolves to `result` when awaited
@@ -50,27 +64,26 @@ const MOCK_SCENES = [
   { id: 'sc-2', order_index: 1, title: 'Main', script_text: 'World', start_time: 5, end_time: 10, duration: 5 },
 ]
 const MOCK_VIDEOS = [
-  { label: 'scene_video_sc-1', storage_url: 'https://cdn/v1.mp4' },
-  { label: 'scene_video_sc-2', storage_url: 'https://cdn/v2.mp4' },
+  { label: 'scene_video_sc-1', storage_path: 'proj-1/videos/v1.mp4' },
+  { label: 'scene_video_sc-2', storage_path: 'proj-1/videos/v2.mp4' },
 ]
 const MOCK_IMAGES = [
-  { label: 'scene_image_sc-1', storage_url: 'https://cdn/i1.png' },
-  { label: 'scene_image_sc-2', storage_url: 'https://cdn/i2.png' },
+  { label: 'scene_image_sc-1', storage_path: 'proj-1/images/i1.png' },
+  { label: 'scene_image_sc-2', storage_path: 'proj-1/images/i2.png' },
 ]
 const MOCK_PER_SCENE_AUDIO = [
-  { label: 'scene_audio_sc-1', storage_url: 'https://cdn/a1.mp3' },
-  { label: 'scene_audio_sc-2', storage_url: 'https://cdn/a2.mp3' },
+  { label: 'scene_audio_sc-1', storage_path: 'proj-1/audio/a1.mp3' },
+  { label: 'scene_audio_sc-2', storage_path: 'proj-1/audio/a2.mp3' },
 ]
 
 const mockAdminFrom = vi.fn()
 const mockStorageUpload = vi.fn().mockResolvedValue({ error: null })
-const mockStorageGetPublicUrl = vi.fn().mockReturnValue({ data: { publicUrl: 'https://cdn/out.mp4' } })
 
 vi.mock('../../../server/worker/lib/supabase', () => ({
   adminSupabase: {
     get from() { return mockAdminFrom },
     storage: {
-      from: () => ({ upload: mockStorageUpload, getPublicUrl: mockStorageGetPublicUrl }),
+      from: () => ({ upload: mockStorageUpload }),
     },
   },
 }))
@@ -82,13 +95,13 @@ const BASE_JOB = { id: 'job-exp-1', project_id: 'proj-1', user_id: 'user-1' }
 /** Wire up adminSupabase.from() calls for a typical export run.
  *  job_outputs is called up to 4 times in order:
  *   1. getLatestSceneVideos/getLatestSceneImages → videos or images (depending on skipVideoGen)
- *   2. getSceneAudioUrls   → perSceneAudio
- *   3. getVoiceTrackUrl    → voiceTrack (only reached if perSceneAudio is incomplete)
+ *   2. getSceneAudioPaths  → perSceneAudio
+ *   3. getVoiceTrackPath   → voiceTrack (only reached if perSceneAudio is incomplete)
  *   4+ insert calls        → insertResult
  */
 function setupFromMock({
   perSceneAudio = [] as unknown[],
-  voiceTrack = null as { storage_url: string } | null,
+  voiceTrack = null as { storage_path: string } | null,
   skipVideoGen = false,
   images = MOCK_IMAGES as unknown[],
 } = {}) {
@@ -132,10 +145,10 @@ describe('export handler — audio source selection', () => {
 
   it('falls back to voice_track when per-scene audio is missing for some scenes', async () => {
     // Only sc-1 has audio — sc-2 is missing
-    const partialAudio = [{ label: 'scene_audio_sc-1', storage_url: 'https://cdn/a1.mp3' }]
+    const partialAudio = [{ label: 'scene_audio_sc-1', storage_path: 'proj-1/audio/a1.mp3' }]
     setupFromMock({
       perSceneAudio: partialAudio,
-      voiceTrack: { storage_url: 'https://cdn/voice.mp3' },
+      voiceTrack: { storage_path: 'proj-1/audio/voice.mp3' },
     })
     const { handleExportJob } = await import('../../../server/worker/handlers/export')
     await handleExportJob(BASE_JOB as never)

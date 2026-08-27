@@ -5,7 +5,8 @@
 // some throw `<Provider> error <code>: <text>`, some (SDKs) throw a leading-code
 // string, and some throw a plain sentence with no code at all (e.g. the missing
 // API-key message). This is a best-effort parser tolerant of all of those.
-// Always imported via relative path — see shared/config/videoFormat.ts for why.
+// Nuxt app code should use the built-in #shared alias; standalone worker code
+// should use a relative path because it runs outside Nuxt's alias resolver.
 
 export interface ParsedJobError {
   status?: string

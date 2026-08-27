@@ -219,7 +219,7 @@ onMounted(async () => {
   // AudioStage needs it for voiceover generation; SceneSplitStage needs it for display.
   if (stage !== 'script') {
     try {
-      const { text } = await $fetch<{ text: string | null }>('/api/script', {
+      const { text } = await globalThis.$fetch<{ text: string | null }>('/api/script', {
         query: { projectId: projectId.value },
       })
       if (text) workspace.setActiveScript(text)
@@ -230,7 +230,7 @@ onMounted(async () => {
   activeTab.value = stageToTab(stage)
 
   // Load which providers have saved API keys (for ModelSelector badges)
-  const keys = await $fetch<{ provider: string }[]>('/api/provider/keys').catch(() => [])
+  const keys = await globalThis.$fetch<{ provider: string }[]>('/api/provider/keys').catch(() => [])
   savedProviderIds.value = [...new Set(keys.map(k => k.provider))]
 
   restoring.value = false

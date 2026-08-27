@@ -88,8 +88,8 @@
 </template>
 
 <script setup lang="ts">
-import { VIDEO_FORMAT } from '../../../shared/config/videoFormat'
-import { countWords, estimateSpokenSeconds } from '../../../shared/utils/scriptLength'
+import { VIDEO_FORMAT } from '#shared/config/videoFormat'
+import { countWords, estimateSpokenSeconds } from '#shared/utils/scriptLength'
 
 const props = defineProps<{
   projectId: string

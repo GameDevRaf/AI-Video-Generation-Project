@@ -294,13 +294,13 @@ async function generateAllVideos() {
   }
 
   await Promise.all(targets.map(async (s) => {
-    const imageUrl = imageStage.getImage(s) ?? undefined
+    const imagePath = imageStage.getImagePath(s) ?? undefined
     const duration = s.duration ?? undefined
     try {
       const job = await jobsStore.createJob(props.projectId, 'video', {
         scene_id: s.id,
         prompt: videoStage.getPrompt(s.id),
-        ...(imageUrl ? { image_url: imageUrl } : {}),
+        ...(imagePath ? { image_path: imagePath } : {}),
         ...(duration !== undefined ? { duration } : {}),
         ...(provider ? { provider } : {}),
         ...(model ? { model } : {}),
@@ -374,13 +374,13 @@ async function generateSingleVideo(sceneId: string, prompt: string) {
   const provider = projectStore.settings?.default_video_provider ?? undefined
   const model = projectStore.settings?.default_video_model ?? undefined
   const scene = scenes.value.find(s => s.id === sceneId)
-  const imageUrl = scene ? (imageStage.getImage(scene) ?? undefined) : undefined
+  const imagePath = scene ? (imageStage.getImagePath(scene) ?? undefined) : undefined
   const duration = scene?.duration ?? undefined
   try {
     await startVideoJob(props.projectId, 'video', {
       scene_id: sceneId,
       prompt,
-      ...(imageUrl ? { image_url: imageUrl } : {}),
+      ...(imagePath ? { image_path: imagePath } : {}),
       ...(duration !== undefined ? { duration } : {}),
       ...(provider ? { provider } : {}),
       ...(model ? { model } : {}),
@@ -407,7 +407,7 @@ async function uploadVideo(sceneId: string, file: File) {
     formData.append('type', 'video')
     formData.append('file', file)
 
-    await $fetch('/api/uploads/media', {
+    await globalThis.$fetch('/api/uploads/media', {
       method: 'POST',
       body: formData,
     })

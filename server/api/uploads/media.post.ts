@@ -8,6 +8,7 @@ import {
   type UploadMediaType,
 } from '../../utils/mediaUpload'
 import { transcodeVideoBufferToMp4 } from '../../utils/ffmpeg'
+import { createSignedAssetUrl } from '../../utils/storage'
 
 export default defineEventHandler(async (event) => {
   const user = await serverSupabaseUser(event)
@@ -88,8 +89,7 @@ export default defineEventHandler(async (event) => {
 
   if (uploadError) throw createError({ statusCode: 500, message: uploadError.message })
 
-  const { data: urlData } = supabase.storage.from('assets').getPublicUrl(storagePath)
-  const storageUrl = urlData.publicUrl
+  const storageUrl = await createSignedAssetUrl(supabase, storagePath)
 
   const { data: job, error: jobError } = await supabase
     .from('jobs')
@@ -126,7 +126,7 @@ export default defineEventHandler(async (event) => {
       project_id: projectId,
       type: validated.mediaType,
       label,
-      storage_url: storageUrl,
+      storage_url: null,
       storage_path: storagePath,
       mime_type: storedMimeType,
       metadata: {

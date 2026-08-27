@@ -11,6 +11,8 @@ export function useImageStage(projectId: MaybeRef<string>) {
   const prompts = ref<Map<string, ScenePrompt>>(new Map())
   // Map of sceneId → image URL
   const images = ref<Map<string, string>>(new Map())
+  // Map of sceneId → durable private-storage path used by queued jobs
+  const imagePaths = ref<Map<string, string>>(new Map())
   // Map of sceneId → prompt that was used when the image was generated
   const generationPrompts = ref<Map<string, string>>(new Map())
   const loading = ref(false)
@@ -18,7 +20,7 @@ export function useImageStage(projectId: MaybeRef<string>) {
   async function fetchPrompts() {
     loading.value = true
     try {
-      const data = await $fetch<ScenePrompt[]>('/api/image-prompts', {
+      const data = await globalThis.$fetch<ScenePrompt[]>('/api/image-prompts', {
         query: { projectId: toValue(projectId) },
       })
       prompts.value = new Map(data.map(p => [p.sceneId, p]))
@@ -28,10 +30,11 @@ export function useImageStage(projectId: MaybeRef<string>) {
   }
 
   async function fetchImages() {
-    const data = await $fetch<{ sceneId: string; url: string; generationPrompt: string }[]>('/api/images', {
+    const data = await globalThis.$fetch<{ sceneId: string; url: string; storage_path: string; generationPrompt: string }[]>('/api/images', {
       query: { projectId: toValue(projectId) },
     })
     images.value = new Map(data.map(i => [i.sceneId, i.url]))
+    imagePaths.value = new Map(data.filter(i => i.storage_path).map(i => [i.sceneId, i.storage_path]))
     generationPrompts.value = new Map(
       data.filter(i => i.generationPrompt).map(i => [i.sceneId, i.generationPrompt]),
     )
@@ -46,7 +49,7 @@ export function useImageStage(projectId: MaybeRef<string>) {
     if (!entry) return
     // Optimistic update so the watcher sees the new value immediately
     prompts.value.set(sceneId, { ...entry, prompt: newText })
-    await $fetch(`/api/image-prompts/${entry.outputId}`, {
+    await globalThis.$fetch(`/api/image-prompts/${entry.outputId}`, {
       method: 'PATCH',
       body: { prompt: newText },
     })
@@ -64,13 +67,17 @@ export function useImageStage(projectId: MaybeRef<string>) {
     return images.value.get(scene.id) ?? null
   }
 
+  function getImagePath(scene: DbScene): string | null {
+    return imagePaths.value.get(scene.id) ?? null
+  }
+
   function getGenerationPrompt(scene: DbScene): string {
     return generationPrompts.value.get(scene.id) ?? ''
   }
 
   return {
-    prompts, images, generationPrompts, loading,
+    prompts, images, imagePaths, generationPrompts, loading,
     fetchPrompts, fetchImages, setPromptsFromJob, savePrompt,
-    getPrompt, hasPrompt, getImage, getGenerationPrompt,
+    getPrompt, hasPrompt, getImage, getImagePath, getGenerationPrompt,
   }
 }

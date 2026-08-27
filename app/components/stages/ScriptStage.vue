@@ -133,8 +133,8 @@
 
 <script setup lang="ts">
 import type { DbJobOutput } from '~/types/database.types'
-import { VIDEO_FORMAT } from '../../../shared/config/videoFormat'
-import { countWords, estimateSpokenSeconds } from '../../../shared/utils/scriptLength'
+import { VIDEO_FORMAT } from '#shared/config/videoFormat'
+import { countWords, estimateSpokenSeconds } from '#shared/utils/scriptLength'
 
 const props = defineProps<{ projectId: string }>()
 const emit = defineEmits<{ done: [] }>()
@@ -201,7 +201,7 @@ const candidates = computed<DbJobOutput[]>(() => {
 onMounted(async () => {
   if (!isLocked.value) return
   try {
-    const data = await $fetch<{ text: string | null; idea: string | null; tone: string | null }>(
+    const data = await globalThis.$fetch<{ text: string | null; idea: string | null; tone: string | null }>(
       '/api/script',
       { query: { projectId: props.projectId } },
     )

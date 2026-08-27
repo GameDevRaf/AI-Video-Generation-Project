@@ -213,12 +213,12 @@ const savedMsg = ref('')
 let saveTimer: ReturnType<typeof setTimeout>
 
 onMounted(async () => {
-  const data = await $fetch<UserSettings>('/api/settings').catch(() => null)
+  const data = await globalThis.$fetch<UserSettings>('/api/settings').catch(() => null)
   if (data) Object.assign(userSettings, data)
 })
 
 async function save(field: keyof UserSettings, value: string | null) {
-  await $fetch('/api/settings', { method: 'PATCH', body: { [field]: value } })
+  await globalThis.$fetch('/api/settings', { method: 'PATCH', body: { [field]: value } })
   if (field in userSettings) (userSettings as Record<string, string | null>)[field] = value
   clearTimeout(saveTimer)
   savedMsg.value = 'Saved'
@@ -252,7 +252,7 @@ const dualCredentialExample = computed(() => {
 })
 
 onMounted(async () => {
-  keys.value = await $fetch<ApiKeyMeta[]>('/api/provider/keys').catch(() => [])
+  keys.value = await globalThis.$fetch<ApiKeyMeta[]>('/api/provider/keys').catch(() => [])
 })
 
 async function addKey() {
@@ -260,7 +260,7 @@ async function addKey() {
   savingKey.value = true
   keyError.value = ''
   try {
-    const created = await $fetch<ApiKeyMeta>('/api/provider/keys', {
+    const created = await globalThis.$fetch<ApiKeyMeta>('/api/provider/keys', {
       method: 'POST',
       body: { provider: newKey.provider, secret: newKey.secret.trim(), keyName: newKey.keyName || undefined },
     })
@@ -276,7 +276,7 @@ async function addKey() {
 
 async function removeKey(id: string) {
   if (!confirm('Remove this API key?')) return
-  await $fetch(`/api/provider/keys/${id}`, { method: 'DELETE' })
+  await globalThis.$fetch(`/api/provider/keys/${id}`, { method: 'DELETE' })
   keys.value = keys.value.filter(k => k.id !== id)
 }
 

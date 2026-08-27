@@ -9,7 +9,7 @@ export default defineAppConfig({
     rootDir: 'docs-site',
   },
   header: {
-    title: 'Vira',
+    title: 'AI Video Generation Project',
   },
   navigation: {
     sub: 'header',
@@ -18,14 +18,14 @@ export default defineAppConfig({
     fts: true,
   },
   seo: {
-    title: 'Vira Docs',
-    description: 'Developer documentation for Vira.',
+    title: 'AI Video Generation Project Docs',
+    description: 'Developer documentation for the AI Video Generation Project.',
   },
   socials: {
     github: {
       label: 'GitHub',
       icon: 'i-simple-icons-github',
-      to: 'https://github.com/',
+      to: 'https://github.com/GameDevRaf/AI-Video-Generation-Project',
     },
   },
   toc: {

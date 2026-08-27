@@ -52,7 +52,7 @@ export function useAudioStage(projectId: MaybeRef<string>) {
   async function fetchExistingAudio() {
     loading.value = true
     try {
-      const data = await $fetch<{ url: string; sceneSnapshot: { id: string; script_text: string }[] | null } | null>('/api/audio', {
+      const data = await globalThis.$fetch<{ url: string; sceneSnapshot: { id: string; script_text: string }[] | null } | null>('/api/audio', {
         query: { projectId: toValue(projectId) },
       })
       if (data?.url) audioUrl.value = data.url

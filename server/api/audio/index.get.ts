@@ -1,4 +1,5 @@
 import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
+import { createSignedAssetUrl } from '../../utils/storage'
 
 // Returns the latest voice_track audio output for a project.
 // Queries job_outputs directly by label so it finds tracks created by single-job
@@ -23,19 +24,23 @@ export default defineEventHandler(async (event) => {
 
   const { data: output } = await supabase
     .from('job_outputs')
-    .select('storage_url, metadata, created_at')
+    .select('storage_path, metadata, created_at')
     .eq('project_id', projectId)
     .eq('type', 'audio')
     .eq('label', 'voice_track')
-    .not('storage_url', 'is', null)
+    .not('storage_path', 'is', null)
     .order('created_at', { ascending: false })
     .limit(1)
     .single()
 
-  if (!output?.storage_url) return null
+  if (!output?.storage_path) return null
 
   const sceneSnapshot = (output.metadata as { scene_snapshot?: { id: string; script_text: string }[] } | null)
     ?.scene_snapshot ?? null
 
-  return { url: output.storage_url, sceneSnapshot, createdAt: output.created_at }
+  return {
+    url: await createSignedAssetUrl(supabase, output.storage_path),
+    sceneSnapshot,
+    createdAt: output.created_at,
+  }
 })

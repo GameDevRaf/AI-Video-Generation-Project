@@ -228,7 +228,7 @@ async function saveInlineKey(providerId: string) {
     const meta = PROVIDER_CATALOG.find(p => p.id === providerId)
     // Store under the shared key provider ID (e.g. nanobanana → gemini, veo → gemini)
     const storeUnder = meta?.keyProviderId ?? providerId
-    await $fetch<ApiKeyMeta>('/api/provider/keys', {
+    await globalThis.$fetch<ApiKeyMeta>('/api/provider/keys', {
       method: 'POST',
       body: { provider: storeUnder, secret: inlineKeyValue.value.trim() },
     })

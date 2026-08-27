@@ -9,6 +9,7 @@ import {
   getFileDurationSeconds,
   runFfmpeg,
 } from '../../utils/ffmpeg'
+import { createSignedAssetUrl } from '../../utils/storage'
 import type { DbJob } from '../../../app/types/database.types'
 import { VIDEO_FORMAT } from '../../../shared/config/videoFormat'
 
@@ -24,7 +25,7 @@ interface SceneRow {
 
 interface OutputRow {
   label: string | null
-  storage_url: string | null
+  storage_path: string | null
 }
 
 const NORMALIZE_FILTER = `scale=${VIDEO_FORMAT.width}:${VIDEO_FORMAT.height}:force_original_aspect_ratio=decrease,pad=${VIDEO_FORMAT.width}:${VIDEO_FORMAT.height}:(ow-iw)/2:(oh-ih)/2,setsar=1`
@@ -32,19 +33,19 @@ const NORMALIZE_FILTER = `scale=${VIDEO_FORMAT.width}:${VIDEO_FORMAT.height}:for
 async function getLatestSceneVideos(projectId: string, sceneIds: string[]) {
   const { data } = await adminSupabase
     .from('job_outputs')
-    .select('label, storage_url')
+    .select('label, storage_path')
     .eq('project_id', projectId)
     .eq('type', 'video')
     .like('label', 'scene_video_%')
-    .not('storage_url', 'is', null)
+    .not('storage_path', 'is', null)
     .order('created_at', { ascending: false })
 
   const wanted = new Set(sceneIds)
   const videoMap = new Map<string, string>()
   for (const row of (data ?? []) as OutputRow[]) {
     const sceneId = row.label?.replace('scene_video_', '') ?? ''
-    if (!sceneId || !wanted.has(sceneId) || videoMap.has(sceneId) || !row.storage_url) continue
-    videoMap.set(sceneId, row.storage_url)
+    if (!sceneId || !wanted.has(sceneId) || videoMap.has(sceneId) || !row.storage_path) continue
+    videoMap.set(sceneId, row.storage_path)
   }
   return videoMap
 }
@@ -52,19 +53,19 @@ async function getLatestSceneVideos(projectId: string, sceneIds: string[]) {
 async function getLatestSceneImages(projectId: string, sceneIds: string[]) {
   const { data } = await adminSupabase
     .from('job_outputs')
-    .select('label, storage_url')
+    .select('label, storage_path')
     .eq('project_id', projectId)
     .eq('type', 'image')
     .like('label', 'scene_image_%')
-    .not('storage_url', 'is', null)
+    .not('storage_path', 'is', null)
     .order('created_at', { ascending: false })
 
   const wanted = new Set(sceneIds)
   const imageMap = new Map<string, string>()
   for (const row of (data ?? []) as OutputRow[]) {
     const sceneId = row.label?.replace('scene_image_', '') ?? ''
-    if (!sceneId || !wanted.has(sceneId) || imageMap.has(sceneId) || !row.storage_url) continue
-    imageMap.set(sceneId, row.storage_url)
+    if (!sceneId || !wanted.has(sceneId) || imageMap.has(sceneId) || !row.storage_path) continue
+    imageMap.set(sceneId, row.storage_path)
   }
   return imageMap
 }
@@ -80,40 +81,40 @@ async function getSkipVideoGen(projectId: string): Promise<boolean> {
   return !!data?.skip_video_gen
 }
 
-// Returns latest per-scene audio URLs (scene_audio_{sceneId}).
-async function getSceneAudioUrls(projectId: string, sceneIds: string[]): Promise<Map<string, string>> {
+// Returns latest per-scene audio storage paths (scene_audio_{sceneId}).
+async function getSceneAudioPaths(projectId: string, sceneIds: string[]): Promise<Map<string, string>> {
   const { data } = await adminSupabase
     .from('job_outputs')
-    .select('label, storage_url')
+    .select('label, storage_path')
     .eq('project_id', projectId)
     .eq('type', 'audio')
     .like('label', 'scene_audio_%')
-    .not('storage_url', 'is', null)
+    .not('storage_path', 'is', null)
     .order('created_at', { ascending: false })
 
   const wanted = new Set(sceneIds)
   const audioMap = new Map<string, string>()
   for (const row of (data ?? []) as OutputRow[]) {
     const sceneId = row.label?.replace('scene_audio_', '') ?? ''
-    if (!sceneId || !wanted.has(sceneId) || audioMap.has(sceneId) || !row.storage_url) continue
-    audioMap.set(sceneId, row.storage_url)
+    if (!sceneId || !wanted.has(sceneId) || audioMap.has(sceneId) || !row.storage_path) continue
+    audioMap.set(sceneId, row.storage_path)
   }
   return audioMap
 }
 
-// Returns the latest single voice_track URL (upload or combined output).
-async function getVoiceTrackUrl(projectId: string): Promise<string | null> {
+// Returns the latest single voice_track storage path (upload or combined output).
+async function getVoiceTrackPath(projectId: string): Promise<string | null> {
   const { data } = await adminSupabase
     .from('job_outputs')
-    .select('storage_url')
+    .select('storage_path')
     .eq('project_id', projectId)
     .eq('type', 'audio')
     .eq('label', 'voice_track')
-    .not('storage_url', 'is', null)
+    .not('storage_path', 'is', null)
     .order('created_at', { ascending: false })
     .limit(1)
     .single()
-  return data?.storage_url ?? null
+  return data?.storage_path ?? null
 }
 
 // Resolves the audio to use for export.
@@ -126,13 +127,13 @@ async function getAudioForExport(
   tempDir: string,
 ): Promise<string | null> {
   const sceneIds = sceneRows.map(s => s.id)
-  const audioMap = await getSceneAudioUrls(projectId, sceneIds)
+  const audioMap = await getSceneAudioPaths(projectId, sceneIds)
 
   if (sceneIds.every(id => audioMap.has(id))) {
     // All scenes have per-scene audio — download and concatenate
     const audioPaths: string[] = []
     for (const scene of sceneRows) {
-      const url = audioMap.get(scene.id)!
+      const url = await createSignedAssetUrl(adminSupabase, audioMap.get(scene.id)!)
       const ext = extensionFromUrl(url, 'mp3')
       const path = join(tempDir, `audio-scene-${scene.order_index}.${ext}`)
       await downloadToFile(url, path)
@@ -154,8 +155,9 @@ async function getAudioForExport(
   }
 
   // Fall back to single voice_track
-  const voiceUrl = await getVoiceTrackUrl(projectId)
-  if (!voiceUrl) return null
+  const voicePath = await getVoiceTrackPath(projectId)
+  if (!voicePath) return null
+  const voiceUrl = await createSignedAssetUrl(adminSupabase, voicePath)
   const ext = extensionFromUrl(voiceUrl, 'mp3')
   const audioPath = join(tempDir, `audio.${ext}`)
   await downloadToFile(voiceUrl, audioPath)
@@ -285,7 +287,8 @@ export async function handleExportJob(job: DbJob) {
     // video, or (Skip Video Gen) the scene image held for its full scene duration.
     const normalizedPaths: string[] = []
     for (const scene of sceneRows) {
-      const url = mediaMap.get(scene.id)!
+      const storagePath = mediaMap.get(scene.id)!
+      const url = await createSignedAssetUrl(adminSupabase, storagePath)
       const normalizedPath = join(tempDir, `scene-${scene.order_index}-normalized.mp4`)
 
       if (skipVideoGen) {
@@ -348,8 +351,6 @@ export async function handleExportJob(job: DbJob) {
       return
     }
 
-    const { data: urlData } = adminSupabase.storage.from('assets').getPublicUrl(storagePath)
-    const storageUrl = urlData.publicUrl
     const totalDuration = sceneRows.reduce((sum, scene) => sum + (scene.duration ?? 0), 0)
     const manifest = {
       version: 2,
@@ -358,7 +359,7 @@ export async function handleExportJob(job: DbJob) {
       mode: skipVideoGen ? 'images_only' : 'video',
       total_duration_seconds: totalDuration,
       has_audio: !!audioFilePath,
-      output_url: storageUrl,
+      output_path: storagePath,
       scenes: sceneRows.map(scene => ({
         id: scene.id,
         index: scene.order_index,
@@ -367,8 +368,8 @@ export async function handleExportJob(job: DbJob) {
         start_time: scene.start_time,
         end_time: scene.end_time,
         duration: scene.duration,
-        video_url: skipVideoGen ? null : mediaMap.get(scene.id) ?? null,
-        image_url: skipVideoGen ? mediaMap.get(scene.id) ?? null : null,
+        video_path: skipVideoGen ? null : mediaMap.get(scene.id) ?? null,
+        image_path: skipVideoGen ? mediaMap.get(scene.id) ?? null : null,
       })),
     }
 
@@ -379,7 +380,7 @@ export async function handleExportJob(job: DbJob) {
         project_id: job.project_id,
         type: 'video',
         label: 'final_export_mp4',
-        storage_url: storageUrl,
+        storage_url: null,
         storage_path: storagePath,
         mime_type: 'video/mp4',
         metadata: manifest,
@@ -394,7 +395,8 @@ export async function handleExportJob(job: DbJob) {
       project_id: job.project_id,
       job_id: job.id,
       export_type: 'mp4',
-      storage_url: storageUrl,
+      storage_url: null,
+      storage_path: storagePath,
       metadata: { manifest },
     })
 
@@ -408,7 +410,7 @@ export async function handleExportJob(job: DbJob) {
       output_summary: {
         scene_count: sceneRows.length,
         has_audio: !!audioFilePath,
-        storage_url: storageUrl,
+        storage_path: storagePath,
         total_duration_seconds: totalDuration,
         mode: skipVideoGen ? 'images_only' : 'video',
       },

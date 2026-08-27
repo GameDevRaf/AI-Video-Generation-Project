@@ -12,7 +12,7 @@ export function useJobPoller() {
   const { pause, resume } = useIntervalFn(async () => {
     if (!job.value?.id) return
     try {
-      const updated = await $fetch<JobWithOutputs>(`/api/jobs/${job.value.id}`)
+      const updated = await globalThis.$fetch<JobWithOutputs>(`/api/jobs/${job.value.id}`)
       job.value = updated
       if (updated.status === 'completed' || updated.status === 'failed') {
         pause()
@@ -34,7 +34,7 @@ export function useJobPoller() {
     job.value = null
 
     try {
-      const created = await $fetch<JobWithOutputs>('/api/jobs', {
+      const created = await globalThis.$fetch<JobWithOutputs>('/api/jobs', {
         method: 'POST',
         body: { projectId, type, input },
       })
@@ -56,7 +56,7 @@ export function useJobPoller() {
     error.value = null
 
     try {
-      const created = await $fetch<JobWithOutputs>(`/api/jobs/${failedJobId}/retry`, {
+      const created = await globalThis.$fetch<JobWithOutputs>(`/api/jobs/${failedJobId}/retry`, {
         method: 'POST',
         body: overrides ?? {},
       })

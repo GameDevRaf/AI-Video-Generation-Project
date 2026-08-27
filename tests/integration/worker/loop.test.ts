@@ -38,7 +38,7 @@ const BASE_JOB = {
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
-describe('worker loop processJob (Superthread 98: no automatic retry)', () => {
+describe('worker loop processJob (no automatic retry)', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('fails immediately after one attempt — never transitions to retrying', async () => {

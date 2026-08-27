@@ -204,7 +204,7 @@ watch(job, (j) => {
 })
 
 async function loadExports() {
-  exports.value = await $fetch<ExportRecord[]>('/api/exports', {
+  exports.value = await globalThis.$fetch<ExportRecord[]>('/api/exports', {
     query: { projectId: props.projectId },
   })
   const metadata = latestExport.value?.metadata
@@ -215,9 +215,9 @@ async function loadExports() {
 
 async function loadCurrentMedia() {
   const [audio, videos, images] = await Promise.all([
-    $fetch<{ url: string; createdAt: string } | null>('/api/audio', { query: { projectId: props.projectId } }),
-    $fetch<{ sceneId: string; url: string; createdAt: string }[]>('/api/videos', { query: { projectId: props.projectId } }),
-    $fetch<{ sceneId: string; url: string; createdAt: string }[]>('/api/images', { query: { projectId: props.projectId } }),
+    globalThis.$fetch<{ url: string; createdAt: string } | null>('/api/audio', { query: { projectId: props.projectId } }),
+    globalThis.$fetch<{ sceneId: string; url: string; createdAt: string }[]>('/api/videos', { query: { projectId: props.projectId } }),
+    globalThis.$fetch<{ sceneId: string; url: string; createdAt: string }[]>('/api/images', { query: { projectId: props.projectId } }),
   ])
   audioUrl.value = audio?.url ?? null
   audioCreatedAt.value = audio?.createdAt ?? null

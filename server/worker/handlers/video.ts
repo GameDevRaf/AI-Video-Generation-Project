@@ -2,6 +2,8 @@ import { getProviderKey } from '../lib/getProviderKey'
 import { providerRegistry } from '../providers/registry'
 import { getCatalogEntry } from '../providers/catalog'
 import { updateJobStatus, storeFileOutput } from '../lib/jobs'
+import { adminSupabase } from '../lib/supabase'
+import { createSignedAssetUrl } from '../../utils/storage'
 import type { DbJob } from '../../../app/types/database.types'
 
 async function downloadVideoUrl(url: string): Promise<{ buffer: Buffer; mime: string }> {
@@ -16,7 +18,8 @@ export async function handleVideoJob(job: DbJob) {
   const input = job.input as {
     scene_id: string
     prompt: string
-    image_url?: string
+    image_path?: string
+    image_url?: string // Legacy/external-provider compatibility; internal assets use image_path.
     duration?: number
     provider?: string
     model?: string
@@ -31,12 +34,16 @@ export async function handleVideoJob(job: DbJob) {
   const apiKey = await getProviderKey(meta?.keyProviderId ?? providerId, job.user_id)
   const provider = providerRegistry.video(providerId)
 
+  const imageUrl = input.image_path
+    ? await createSignedAssetUrl(adminSupabase, input.image_path)
+    : input.image_url
+
   const result = await provider.generate({
     job,
     apiKey,
     model,
     prompt: input.prompt,
-    imageUrl: input.image_url,
+    imageUrl,
     duration: input.duration ?? 5,
   })
 

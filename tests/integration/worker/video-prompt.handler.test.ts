@@ -24,6 +24,11 @@ vi.mock('../../../server/worker/lib/visualDescriptions', () => ({
   ensureVisualDescriptions: mockEnsureVisualDescriptions,
 }))
 
+const mockCreateSignedAssetUrl = vi.fn(async (_client: unknown, path: string) => `https://signed.test/${path}`)
+vi.mock('../../../server/utils/storage', () => ({
+  createSignedAssetUrl: mockCreateSignedAssetUrl,
+}))
+
 const allScenes = [
   { id: 'scene-1', title: 'One', script_text: 'First scene', duration: 4 },
   { id: 'scene-2', title: 'Two', script_text: 'Second scene', duration: 5.6 },
@@ -36,7 +41,7 @@ const sceneQuery = {
 }
 
 // Generated first-frame images for the vision path (configurable per test).
-let imageRows: Array<{ label: string; storage_url: string; created_at: string }> = []
+let imageRows: Array<{ label: string; storage_path: string; created_at: string }> = []
 const jobOutputsQuery = {
   select: vi.fn(() => jobOutputsQuery),
   eq: vi.fn(() => jobOutputsQuery),
@@ -176,7 +181,7 @@ describe('video prompt handler', () => {
   })
 
   it('attaches the first-frame image to a vision-capable provider call', async () => {
-    imageRows = [{ label: 'scene_image_scene-2', storage_url: 'http://img/2.png', created_at: '2026-01-01' }]
+    imageRows = [{ label: 'scene_image_scene-2', storage_path: 'project-1/images/2.png', created_at: '2026-01-01' }]
     mockScriptGenerate.mockResolvedValueOnce({ text: 'motion with image' })
 
     const { handleVideoPromptJob } = await import('../../../server/worker/handlers/video_prompt')
@@ -201,7 +206,7 @@ describe('video prompt handler', () => {
   })
 
   it('retries text-only when the vision call throws', async () => {
-    imageRows = [{ label: 'scene_image_scene-2', storage_url: 'http://img/2.png', created_at: '2026-01-01' }]
+    imageRows = [{ label: 'scene_image_scene-2', storage_path: 'project-1/images/2.png', created_at: '2026-01-01' }]
     mockScriptGenerate
       .mockRejectedValueOnce(new Error('vision unsupported'))
       .mockResolvedValueOnce({ text: 'recovered motion' })
@@ -217,7 +222,7 @@ describe('video prompt handler', () => {
   })
 
   it('drops the image wording when retrying text-only after a vision failure', async () => {
-    imageRows = [{ label: 'scene_image_scene-2', storage_url: 'http://img/2.png', created_at: '2026-01-01' }]
+    imageRows = [{ label: 'scene_image_scene-2', storage_path: 'project-1/images/2.png', created_at: '2026-01-01' }]
     mockScriptGenerate
       .mockRejectedValueOnce(new Error('vision unsupported'))
       .mockResolvedValueOnce({ text: 'recovered motion' })

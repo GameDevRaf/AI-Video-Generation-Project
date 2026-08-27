@@ -9,6 +9,6 @@ export default defineEventHandler((event) => {
   }
 
   setResponseStatus(event, 404)
-  setHeader(event, 'x-vira-mcp-discovery', 'not-configured')
+  setHeader(event, 'x-project-mcp-discovery', 'not-configured')
   return sendNoContent(event, 404)
 })

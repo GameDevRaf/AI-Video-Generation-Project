@@ -1,4 +1,5 @@
 import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
+import { createSignedAssetUrl } from '../../utils/storage'
 
 // Returns generated video URLs keyed by scene_id.
 // Reads from job_outputs directly (label: "scene_video_{scene_id}").
@@ -23,7 +24,7 @@ export default defineEventHandler(async (event) => {
 
   const { data } = await supabase
     .from('job_outputs')
-    .select('label, storage_url, metadata, created_at')
+    .select('label, storage_path, metadata, created_at')
     .eq('project_id', projectId)
     .eq('type', 'video')
     .like('label', 'scene_video_%')
@@ -35,11 +36,11 @@ export default defineEventHandler(async (event) => {
 
   for (const row of data ?? []) {
     const sceneId = row.label?.replace('scene_video_', '') ?? ''
-    if (!sceneId || seen.has(sceneId) || !row.storage_url) continue
+    if (!sceneId || seen.has(sceneId) || !row.storage_path) continue
     seen.add(sceneId)
     result.push({
       sceneId,
-      url: row.storage_url,
+      url: await createSignedAssetUrl(supabase, row.storage_path),
       generationPrompt: (row.metadata as { prompt?: string } | null)?.prompt ?? '',
       createdAt: row.created_at,
     })

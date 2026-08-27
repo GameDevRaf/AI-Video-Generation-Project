@@ -14,7 +14,7 @@ export const useProjectStore = defineStore('project', () => {
     loading.value = true
     error.value = null
     try {
-      const data = await $fetch<DbProject & { project_settings: DbProjectSettings | null }>(
+      const data = await globalThis.$fetch<DbProject & { project_settings: DbProjectSettings | null }>(
         `/api/projects/${id}`,
       )
       currentProject.value = data
@@ -29,7 +29,7 @@ export const useProjectStore = defineStore('project', () => {
   async function setStage(stage: string) {
     if (!currentProject.value) return
     currentProject.value.current_stage = stage
-    await $fetch(`/api/projects/${currentProject.value.id}`, {
+    await globalThis.$fetch(`/api/projects/${currentProject.value.id}`, {
       method: 'PATCH',
       body: { current_stage: stage },
     })
@@ -40,7 +40,7 @@ export const useProjectStore = defineStore('project', () => {
     const previous = settings.value ? { ...settings.value } : null
     if (settings.value) Object.assign(settings.value, partial)
     try {
-      await $fetch(`/api/projects/${currentProject.value.id}/settings`, {
+      await globalThis.$fetch(`/api/projects/${currentProject.value.id}/settings`, {
         method: 'PATCH',
         body: partial,
       })

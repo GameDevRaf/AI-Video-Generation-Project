@@ -118,14 +118,14 @@ const quickSecret = ref('')
 const saving = ref(false)
 
 onMounted(async () => {
-  keys.value = await $fetch<ApiKeyMeta[]>('/api/provider/keys').catch(() => [])
+  keys.value = await globalThis.$fetch<ApiKeyMeta[]>('/api/provider/keys').catch(() => [])
 })
 
 async function quickAdd() {
   if (!quickSecret.value.trim()) return
   saving.value = true
   try {
-    const created = await $fetch<ApiKeyMeta>('/api/provider/keys', {
+    const created = await globalThis.$fetch<ApiKeyMeta>('/api/provider/keys', {
       method: 'POST',
       body: { provider: quickProvider.value, secret: quickSecret.value.trim() },
     })

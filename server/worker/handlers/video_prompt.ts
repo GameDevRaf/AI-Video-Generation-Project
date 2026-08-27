@@ -5,6 +5,7 @@ import { getCatalogEntry } from '../providers/catalog'
 import { updateJobStatus, storeTextOutput } from '../lib/jobs'
 import { resolveScriptProvider } from '../lib/scriptProvider'
 import { ensureVisualDescriptions } from '../lib/visualDescriptions'
+import { createSignedAssetUrl } from '../../utils/storage'
 import type { DbJob } from '../../../app/types/database.types'
 import type { ScriptImage, ScriptProvider } from '../providers/types'
 
@@ -62,11 +63,11 @@ async function generateWithRetries(
   throw lastError
 }
 
-/** Newest generated first-frame image URL per requested scene (label `scene_image_{id}`). */
+/** Newest generated first-frame image storage path per requested scene (label `scene_image_{id}`). */
 async function loadSceneImageUrls(projectId: string, sceneIds: string[]): Promise<Map<string, string>> {
   const { data } = await adminSupabase
     .from('job_outputs')
-    .select('label, storage_url, created_at')
+    .select('label, storage_path, created_at')
     .eq('project_id', projectId)
     .eq('type', 'image')
     .like('label', 'scene_image_%')
@@ -76,8 +77,8 @@ async function loadSceneImageUrls(projectId: string, sceneIds: string[]): Promis
   const map = new Map<string, string>()
   for (const row of data ?? []) {
     const sceneId = (row.label as string).replace('scene_image_', '')
-    const url = row.storage_url as string | null
-    if (url && wanted.has(sceneId) && !map.has(sceneId)) map.set(sceneId, url)
+    const storagePath = row.storage_path as string | null
+    if (storagePath && wanted.has(sceneId) && !map.has(sceneId)) map.set(sceneId, storagePath)
   }
   return map
 }
@@ -132,7 +133,8 @@ export async function handleVideoPromptJob(job: DbJob) {
   let promptCount = 0
   for (const scene of targets) {
     const description = byScene.get(scene.id) ?? scene.script_text
-    const imageUrl = imageUrls.get(scene.id)
+    const imagePath = imageUrls.get(scene.id)
+    const imageUrl = imagePath ? await createSignedAssetUrl(adminSupabase, imagePath) : null
     const image = imageUrl ? await fetchImage(imageUrl) : null
 
     let text: string

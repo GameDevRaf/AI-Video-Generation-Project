@@ -1,9 +1,21 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 
-// Derives a stable 32-byte AES key from the Supabase service role key
+const ENCRYPTION_SECRET_ENV = 'API_KEY_ENCRYPTION_SECRET'
+
+function encryptionSecret(): string {
+  const secret = process.env[ENCRYPTION_SECRET_ENV]?.trim()
+  if (!secret) {
+    throw new Error(`${ENCRYPTION_SECRET_ENV} must be set to encrypt provider API keys`)
+  }
+  if (secret.length < 32) {
+    throw new Error(`${ENCRYPTION_SECRET_ENV} must be at least 32 characters long`)
+  }
+  return secret
+}
+
+// Derives a stable 32-byte AES key from a dedicated application secret.
 function derivedKey(): Buffer {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'dev-fallback-secret'
-  return createHash('sha256').update(secret).digest()
+  return createHash('sha256').update(encryptionSecret()).digest()
 }
 
 export function encrypt(plaintext: string): string {

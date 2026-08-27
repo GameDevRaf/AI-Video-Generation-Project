@@ -10,7 +10,7 @@ export function useScenes(projectId: MaybeRef<string>) {
     loading.value = true
     error.value = null
     try {
-      scenes.value = await $fetch<DbScene[]>('/api/scenes', {
+      scenes.value = await globalThis.$fetch<DbScene[]>('/api/scenes', {
         query: { projectId: toValue(projectId) },
       })
       sceneOrderSync.registerFetchedScenes(scenes.value)
@@ -53,7 +53,7 @@ export function useScenes(projectId: MaybeRef<string>) {
     }
 
     // Otherwise just patch the single scene
-    await $fetch(`/api/scenes/${id}`, { method: 'PATCH', body: patch })
+    await globalThis.$fetch(`/api/scenes/${id}`, { method: 'PATCH', body: patch })
   }
 
   async function moveScene(id: string, direction: 'up' | 'down') {
@@ -73,7 +73,7 @@ export function useScenes(projectId: MaybeRef<string>) {
     const idx = scenes.value.findIndex(s => s.id === id)
     if (idx === -1) return
 
-    await $fetch(`/api/scenes/${id}`, { method: 'DELETE' })
+    await globalThis.$fetch(`/api/scenes/${id}`, { method: 'DELETE' })
 
     const remaining = scenes.value.filter(s => s.id !== id)
     const recalced = recalcTimestamps(remaining)
@@ -91,7 +91,7 @@ export function useScenes(projectId: MaybeRef<string>) {
   }
 
   async function createScene() {
-    const created = await $fetch<DbScene>('/api/scenes', {
+    const created = await globalThis.$fetch<DbScene>('/api/scenes', {
       method: 'POST',
       body: { projectId: toValue(projectId) },
     })
@@ -109,7 +109,7 @@ export function useScenes(projectId: MaybeRef<string>) {
   }
 
   async function persistTimestamps(list: DbScene[]) {
-    await $fetch('/api/scenes/reorder', {
+    await globalThis.$fetch('/api/scenes/reorder', {
       method: 'POST',
       body: {
         projectId: toValue(projectId),

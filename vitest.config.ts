@@ -3,6 +3,9 @@ import { defineVitestConfig } from '@nuxt/test-utils/config'
 export default defineVitestConfig({
   test: {
     globals: true,
+    // Nuxt's generated test environment can take longer than 10 seconds to
+    // bootstrap on a cold Windows checkout.
+    hookTimeout: 30_000,
     // E2E specs are run by Playwright, not vitest
     exclude: ['tests/e2e/**', 'node_modules/**'],
     environmentMatchGlobs: [

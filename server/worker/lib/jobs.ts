@@ -49,16 +49,13 @@ export async function storeFileOutput(
   label: string,
   mimeType: string,
   metadata?: Record<string, unknown>,
-): Promise<{ outputId: string; storageUrl: string }> {
+): Promise<{ outputId: string; storagePath: string }> {
   // Upload to Supabase Storage bucket "assets"
   const { error: uploadError } = await adminSupabase.storage
     .from('assets')
     .upload(storagePath, fileBuffer, { contentType: mimeType, upsert: true })
 
   if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`)
-
-  const { data: urlData } = adminSupabase.storage.from('assets').getPublicUrl(storagePath)
-  const storageUrl = urlData.publicUrl
 
   const { data, error } = await adminSupabase
     .from('job_outputs')
@@ -67,7 +64,7 @@ export async function storeFileOutput(
       project_id: job.project_id,
       type,
       label,
-      storage_url: storageUrl,
+      storage_url: null,
       storage_path: storagePath,
       mime_type: mimeType,
       ...(metadata ? { metadata } : {}),
@@ -76,5 +73,5 @@ export async function storeFileOutput(
     .single()
 
   if (error) throw new Error(`storeFileOutput record failed: ${error.message}`)
-  return { outputId: data.id, storageUrl }
+  return { outputId: data.id, storagePath }
 }

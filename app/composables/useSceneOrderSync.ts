@@ -85,7 +85,7 @@ export function useSceneOrderSync(projectId: MaybeRef<string>) {
     flushing.value = true
     try {
       const currentPendingScenes = pendingScenes.value
-      await $fetch('/api/scenes/reorder', {
+      await globalThis.$fetch('/api/scenes/reorder', {
         method: 'POST',
         body: {
           projectId: toValue(projectId),
@@ -94,7 +94,7 @@ export function useSceneOrderSync(projectId: MaybeRef<string>) {
       })
 
       try {
-        await $fetch('/api/audio/combine', {
+        await globalThis.$fetch('/api/audio/combine', {
           method: 'POST',
           body: { projectId: toValue(projectId) },
         })

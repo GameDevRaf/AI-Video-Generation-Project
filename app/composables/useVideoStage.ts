@@ -13,7 +13,7 @@ export function useVideoStage(projectId: MaybeRef<string>) {
   async function fetchPrompts() {
     loading.value = true
     try {
-      const data = await $fetch<SceneVideoPrompt[]>('/api/video-prompts', {
+      const data = await globalThis.$fetch<SceneVideoPrompt[]>('/api/video-prompts', {
         query: { projectId: toValue(projectId) },
       })
       prompts.value = new Map(data.map(p => [p.sceneId, p]))
@@ -23,7 +23,7 @@ export function useVideoStage(projectId: MaybeRef<string>) {
   }
 
   async function fetchVideos() {
-    const data = await $fetch<{ sceneId: string; url: string; generationPrompt: string }[]>('/api/videos', {
+    const data = await globalThis.$fetch<{ sceneId: string; url: string; generationPrompt: string }[]>('/api/videos', {
       query: { projectId: toValue(projectId) },
     })
     videos.value = new Map(data.map(v => [v.sceneId, v.url]))
@@ -36,7 +36,7 @@ export function useVideoStage(projectId: MaybeRef<string>) {
     const entry = prompts.value.get(sceneId)
     if (!entry) return
     prompts.value.set(sceneId, { ...entry, prompt: newText })
-    await $fetch(`/api/video-prompts/${entry.outputId}`, {
+    await globalThis.$fetch(`/api/video-prompts/${entry.outputId}`, {
       method: 'PATCH',
       body: { prompt: newText },
     })

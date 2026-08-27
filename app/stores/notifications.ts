@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { parseJobError } from '../../shared/utils/parseJobError'
+import { parseJobError } from '#shared/utils/parseJobError'
 
 export interface ToastNotification {
   id: string

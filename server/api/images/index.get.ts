@@ -1,4 +1,5 @@
 import { serverSupabaseClient, serverSupabaseUser } from '~~/supabase-server'
+import { createSignedAssetUrl } from '../../utils/storage'
 
 // Returns generated image URLs keyed by scene_id.
 // Reads from job_outputs directly (label: "scene_image_{scene_id}").
@@ -23,24 +24,25 @@ export default defineEventHandler(async (event) => {
 
   const { data } = await supabase
     .from('job_outputs')
-    .select('label, storage_url, metadata, created_at')
+    .select('label, storage_path, metadata, created_at')
     .eq('project_id', projectId)
     .eq('type', 'image')
     .like('label', 'scene_image_%')
-    .not('storage_url', 'is', null)
+    .not('storage_path', 'is', null)
     .order('created_at', { ascending: false })
 
   // Deduplicate: newest image per scene_id
   const seen = new Set<string>()
-  const result: { sceneId: string; url: string; generationPrompt: string; createdAt: string }[] = []
+  const result: { sceneId: string; url: string; storage_path: string; generationPrompt: string; createdAt: string }[] = []
 
   for (const row of data ?? []) {
     const sceneId = row.label?.replace('scene_image_', '') ?? ''
-    if (!sceneId || seen.has(sceneId) || !row.storage_url) continue
+    if (!sceneId || seen.has(sceneId) || !row.storage_path) continue
     seen.add(sceneId)
     result.push({
       sceneId,
-      url: row.storage_url,
+      url: await createSignedAssetUrl(supabase, row.storage_path),
+      storage_path: row.storage_path,
       generationPrompt: (row.metadata as { prompt?: string } | null)?.prompt ?? '',
       createdAt: row.created_at,
     })

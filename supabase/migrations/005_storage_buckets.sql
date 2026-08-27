@@ -3,14 +3,15 @@
 -- Run this in Supabase SQL Editor (Project > SQL Editor > New query)
 -- ============================================================
 
--- ---- Create the single "assets" bucket ----
--- All generated files (images, audio, video) are stored here.
+-- ---- Create the single private "assets" bucket ----
+-- All generated files (images, audio, video) are stored here and served with
+-- short-lived signed URLs, never as public object URLs.
 -- Paths follow: {project_id}/{type}/{filename}
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'assets',
   'assets',
-  true,
+  false,
   524288000, -- 500 MB per file
   array[
     'image/png', 'image/jpeg', 'image/webp', 'image/gif',

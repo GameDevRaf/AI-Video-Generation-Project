@@ -2,6 +2,9 @@
   "name": "AI-Video-Generation-Project",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": ">=20 <25"
+  },
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
@@ -13,6 +16,7 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
+    "test:database": "vitest run tests/integration/database",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
@@ -34,7 +38,7 @@
     "groq-sdk": "^1.2.1",
     "jose": "^6.2.3",
     "lumaai": "^1.19.1",
-    "nuxt": "^4.4.8",
+    "nuxt": "^4.5.2",
     "openai": "^6.44.0",
     "pinia": "^3.0.4",
     "tailwindcss": "^4.3.1",
@@ -44,7 +48,7 @@
     "vue-router": "^5.1.0"
   },
   "devDependencies": {
-    "@nuxt/test-utils": "^4.0.3",
+    "@nuxt/test-utils": "^4.1.0",
     "@playwright/test": "^1.61.0",
     "@types/node": "^26.0.0",
     "@vue/test-utils": "^2.4.11",
@@ -54,5 +58,9 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
     "vue-tsc": "^3.3.5"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.9",
+    "protobufjs": "7.6.6"
   }
 }

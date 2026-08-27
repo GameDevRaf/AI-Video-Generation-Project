@@ -13,7 +13,7 @@ export function useProjects() {
     loading.value = true
     error.value = null
     try {
-      projects.value = await $fetch<ProjectWithSettings[]>('/api/projects')
+      projects.value = await globalThis.$fetch<ProjectWithSettings[]>('/api/projects')
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : 'Failed to load projects'
     } finally {
@@ -22,7 +22,7 @@ export function useProjects() {
   }
 
   async function createProject(name: string, description?: string): Promise<DbProject> {
-    const project = await $fetch<DbProject>('/api/projects', {
+    const project = await globalThis.$fetch<DbProject>('/api/projects', {
       method: 'POST',
       body: { name, description },
     })
@@ -31,7 +31,7 @@ export function useProjects() {
   }
 
   async function deleteProject(id: string) {
-    await $fetch(`/api/projects/${id}`, { method: 'DELETE' })
+    await globalThis.$fetch(`/api/projects/${id}`, { method: 'DELETE' })
     projects.value = projects.value.filter(p => p.id !== id)
   }
 

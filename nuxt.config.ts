@@ -5,7 +5,7 @@ const supabaseServerAlias = resolve(process.cwd(), 'supabase-server.ts')
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
-  devtools: { enabled: true },
+  devtools: { enabled: process.env.NUXT_DEVTOOLS === 'true' },
 
   alias: {
     '#supabase/server': supabaseServerAlias,

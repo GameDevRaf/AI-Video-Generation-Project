@@ -1,7 +1,7 @@
 <template>
   <div
     class="group relative flex flex-col gap-3 p-4 rounded-xl border border-white/10 bg-white/3 hover:bg-white/5 hover:border-white/20 transition-all cursor-pointer"
-    @click="$router.push(`/workspace/${project.id}`)"
+    @click="router.push(`/workspace/${project.id}`)"
   >
     <!-- Stage badge -->
     <span class="self-start text-xs px-2 py-0.5 rounded-full bg-white/8 text-gray-400 capitalize">
@@ -33,6 +33,7 @@ import type { ProjectWithSettings } from '~/composables/useProjects'
 
 const props = defineProps<{ project: ProjectWithSettings }>()
 defineEmits<{ delete: [id: string] }>()
+const router = useRouter()
 
 const relativeTime = computed(() => {
   const diff = Date.now() - new Date(props.project.updated_at).getTime()

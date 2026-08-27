@@ -200,7 +200,7 @@ async function pollAudioJobs() {
   await Promise.all(
     jobState.value.pendingIds.map(async (jobId) => {
       try {
-        const j = await $fetch<{ status: string }>(`/api/jobs/${jobId}`)
+        const j = await globalThis.$fetch<{ status: string }>(`/api/jobs/${jobId}`)
         if (j.status === 'completed') {
           newCompleted++
         } else if (j.status === 'failed') {
@@ -244,7 +244,7 @@ async function onAllAudioJobsComplete() {
   if (jobState.value.failed < jobState.value.total) {
     // At least some succeeded — combine per-scene audio into a single voice_track for the player
     try {
-      await $fetch<{ url: string }>('/api/audio/combine', {
+      await globalThis.$fetch<{ url: string }>('/api/audio/combine', {
         method: 'POST',
         body: { projectId: props.projectId },
       })
@@ -286,7 +286,7 @@ async function generate() {
   // Fire one audio job per scene in parallel
   const results = await Promise.allSettled(
     sortedScenes.map(scene =>
-      $fetch<{ id: string }>('/api/jobs', {
+      globalThis.$fetch<{ id: string }>('/api/jobs', {
         method: 'POST',
         body: {
           projectId: props.projectId,
@@ -333,7 +333,7 @@ async function retryFailedAudio() {
   notifications.dismiss('audio-bulk')
 
   const results = await Promise.allSettled(
-    toRetry.map(({ jobId }) => $fetch<{ id: string }>(`/api/jobs/${jobId}/retry`, { method: 'POST', body: {} })),
+    toRetry.map(({ jobId }) => globalThis.$fetch<{ id: string }>(`/api/jobs/${jobId}/retry`, { method: 'POST', body: {} })),
   )
 
   const successIds: string[] = []
@@ -369,7 +369,7 @@ async function onAudioFileChange(event: Event) {
     formData.append('type', 'audio')
     formData.append('file', file)
 
-    const result = await $fetch<{ url: string }>('/api/uploads/media', {
+    const result = await globalThis.$fetch<{ url: string }>('/api/uploads/media', {
       method: 'POST',
       body: formData,
     })

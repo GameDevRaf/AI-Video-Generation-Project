@@ -104,6 +104,7 @@ export interface JobWithLatestOutput {
     type: string
     label: string | null
     storage_url: string | null
+    storage_path: string | null
     metadata: Record<string, unknown> | null
   } | null
 }
@@ -121,6 +122,8 @@ export interface ExportRecord {
   project_id: string
   job_id: string
   export_type: string
+  storage_url: string | null
+  storage_path: string | null
   metadata: Record<string, unknown> | null
   created_at: string
 }
