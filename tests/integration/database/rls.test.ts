@@ -24,6 +24,24 @@ async function supabaseIsReachable(): Promise<boolean> {
   }
 }
 
+async function assertPrivateStorageSchema(admin: SupabaseClient): Promise<void> {
+  const bucketResponse = await fetch(`${supabaseUrl}/storage/v1/bucket/assets`, {
+    headers: {
+      apikey: serviceRoleKey!,
+      authorization: `Bearer ${serviceRoleKey}`,
+    },
+  })
+  const bucket = await bucketResponse.json().catch(() => null) as { public?: boolean } | null
+  if (!bucketResponse.ok || bucket?.public !== false) {
+    throw new Error('The assets storage bucket must exist and be private; apply the storage migrations')
+  }
+
+  const { error } = await admin.from('exports').select('storage_path').limit(1)
+  if (error) {
+    throw new Error('The exports.storage_path column is missing; apply migration 009_private_assets.sql')
+  }
+}
+
 suite('Supabase ownership and RLS', () => {
   let admin: SupabaseClient
   let ownerClient: SupabaseClient
@@ -46,6 +64,7 @@ suite('Supabase ownership and RLS', () => {
     }
     try {
       admin = createClient(supabaseUrl!, serviceRoleKey!, { auth: { persistSession: false } })
+      await assertPrivateStorageSchema(admin)
 
       ownerEmail = `rls-owner-${randomUUID()}@example.com`
       ownerPassword = `RlsTest-${randomUUID()}!`
