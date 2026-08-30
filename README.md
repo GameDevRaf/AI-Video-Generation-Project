@@ -1,5 +1,14 @@
 # AI Video Generation Project
 
+This project started for the purpose of automating the process of creating shorts.
+The base infrastructure and pipeline is built, so you can create videos end-to-end with it.
+
+But, so far, no additional work has been done to improve the quality of the generated videos.
+
+I learned quite a bit on how to setup and use AI in a development environment through this project.
+
+---
+
 AI Video Generation Project is a full-stack Nuxt application that turns a text idea into a short-form video:
 
 ```text
@@ -12,7 +21,7 @@ It is built as a portfolio project and demonstrates a database-backed job queue,
 
 - Guided workspace for script, scene, image, audio, video, and export stages.
 - Multiple interchangeable providers for text, image, audio, and video generation.
-- Bring-your-own provider API keys, encrypted at rest on the server.
+- Bring-your-own provider API keys (BYOK), encrypted at rest on the server.
 - Background worker for slow provider calls and polling jobs.
 - Scene uploads, regeneration, retry handling, and latest-output selection.
 - Private Supabase Storage assets served through one-hour signed URLs.
