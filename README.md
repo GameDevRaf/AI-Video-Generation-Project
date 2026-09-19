@@ -7,6 +7,8 @@ But, so far, no additional work has been done to improve the quality of the gene
 
 I learned quite a bit on how to setup and use AI in a development environment through this project.
 
+This specific repo is currently abandoned as I'm now working on the same idea but in a different format.
+
 ---
 
 AI Video Generation Project is a full-stack Nuxt application that turns a text idea into a short-form video:
